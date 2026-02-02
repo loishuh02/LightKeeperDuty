@@ -17,14 +17,14 @@ body {
 }
 
 body.dayone {
-    background-image: url('images/lighthouse_inside.png');
+    /* Ocean color is a gradient layer under the scene image. JS can animate the --ocean-top and --ocean-bottom vars. */
+    --ocean-top: #001a33;
+    --ocean-bottom: #003b5c;
+    background-image: linear-gradient(var(--ocean-top), var(--ocean-bottom)), url('images/lighthouse_inside.png');
     background-repeat: no-repeat;
     background-position-y: 0px;
     background-size: 100% auto;
-    /* background-position: center;
-    background-size: cover;
-    height: 100%;
-    background-position: center; */
+    background-blend-mode: normal;
 }
 
 
