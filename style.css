@@ -1,0 +1,68 @@
+
+main {
+    text-align: center;
+    margin-top: 15vh;
+    font-size: 1.8em;
+}
+
+body {
+    /*font-family: 'Amatic SC', cursive;
+    font-weight: 700;*/
+    background-image: url('images/homepage_background.png');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    height: 100%;
+    background-position: center;
+}
+
+body.dayone {
+    background-image: url('images/lighthouse_inside.png');
+    background-repeat: no-repeat;
+    background-position-y: 0px;
+    background-size: 100% auto;
+    /* background-position: center;
+    background-size: cover;
+    height: 100%;
+    background-position: center; */
+}
+
+
+/*
+.amatic-sc-regular {
+  font-family: "Amatic SC", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.amatic-sc-bold {
+  font-family: "Amatic SC", sans-serif;
+  font-weight: 700;
+  font-style: normal;
+}
+  */
+
+
+
+#homepage_instruction_one {
+    top: 50%;
+    left: 50%;
+    position: absolute;
+    transform: translate(-50%, -50%);
+    font-size: 1.4em;
+    padding-left: 4%;
+    padding-right: 4%;
+}
+
+#homepage_paragraph {
+    text-align: center;
+    margin-top: 50vh;
+    font-size: .8em;
+}
+
+input{
+    margin-top: 2vh;
+    font-size: 1em;
+    font-size: 1.2em;
+    padding: 0.5em;
+}

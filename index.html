@@ -3,21 +3,31 @@
   <head>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/addons/p5.sound.min.js"></script>
+    <!-- <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@400;700&family=Julius+Sans+One&display=swap" rel="stylesheet"> -->
     <link rel="stylesheet" type="text/css" href="style.css">
     <meta charset="utf-8" />
   </head>
 
   <title>Storytelling Website</title>
 
-  <body>
+  <body class="homepage">
     <main>
-      <h3>Employment Contract Agreement</h3>
+      <h1>Employment Contract Agreement</h1>
     </main>
 
     <script src="sketch.js"></script>
 
-    <p>By signing my name, I agree to work as a light keeper to protect the village for 3 days.</p>
-    <input type="text" id="signature" name="signature" placeholder="Type your name here to sign">
-    <p id="warning_statement"> You may discontinue your employment only when there are life-threatening circumstances.</p>
+      <p id="homepage_instruction_one">By signing my name, I agree to work as a light keeper to protect the village for 3 days.</p>
+
+    <div id="homepage_paragraph">
+      <form action="/dayone.html" method="post">
+        <br><input type="text" id="username" name="username" placeholder="Enter your name here" required><br>
+        <input type="submit" value="Submit">
+      </form>
+
+      <p id="home_warning_statement"> You may discontinue your employment only when there are life-threatening circumstances.</p>
+    </div>
   </body>
 </html>
