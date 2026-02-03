@@ -17,14 +17,30 @@ body {
 }
 
 body.dayone {
-    /* Ocean color is a gradient layer under the scene image. JS can animate the --ocean-top and --ocean-bottom vars. */
+    /* Ocean color is a gradient layer. JS can animate the --ocean-top and --ocean-bottom vars. */
     --ocean-top: #001a33;
     --ocean-bottom: #003b5c;
-    background-image: linear-gradient(var(--ocean-top), var(--ocean-bottom)), url('images/lighthouse_inside.png');
+    /* gradient only — the scene image is placed in a top layer so the canvas underneath can show through transparent areas */
+    background-image: linear-gradient(var(--ocean-top), var(--ocean-bottom));
     background-repeat: no-repeat;
     background-position-y: 0px;
     background-size: 100% auto;
     background-blend-mode: normal;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Top overlay that shows the lighthouse scene — placed above the canvas so falling objects are visible only in transparent parts */
+body.dayone::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: url('images/lighthouse_inside.png');
+    background-repeat: no-repeat;
+    background-position: top center;
+    background-size: 100% auto;
+    z-index: 2;
+    pointer-events: none; /* allow clicks to pass through to the canvas buttons underneath */
 }
 
 

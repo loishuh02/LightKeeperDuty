@@ -41,7 +41,8 @@ function setup() {
   }
   canvas = createCanvas(windowWidth, windowHeight);
   canvas.position(0, 0);
-  canvas.style('z-index', '1');
+  // put the canvas underneath the top scene overlay so falling images are visible only through transparent parts
+  canvas.style('z-index', '0');
   canvas.style('position', 'fixed');
   imageMode(CORNER);
 
