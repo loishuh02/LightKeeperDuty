@@ -5,45 +5,11 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Ending</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-      body.ending {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        margin: 0;
-        background: linear-gradient(#001a33, #003b5c);
-        color: #fff;
-        text-align: center;
-        font-family: sans-serif;
-      }
-      .card {
-        background: rgba(0,0,0,0.45);
-        padding: 2rem 3rem;
-        border-radius: 12px;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-      }
-      .big {
-        font-size: 2rem;
-        margin-bottom: 1rem;
-      }
-      button {
-        padding: 0.7rem 1.2rem;
-        font-size: 1rem;
-        border-radius: 8px;
-        border: none;
-        cursor: pointer;
-        background: #ffd166;
-        color: #022;
-      }
-    </style>
   </head>
-  <body class="ending">
-    <div class="card">
-      <div id="message" class="big">...</div>
-      <div>
-        <button id="homeBtn">Go to Homepage</button>
-      </div>
+  <body class="ending-page">
+    <div id="ending-container">
+      <div id="ending-message" class="ending-text">...</div>
+      <button id="homeBtn">Return to Homepage</button>
     </div>
 
     <script>
@@ -52,7 +18,7 @@
         return params.get(variable);
       }
       const result = getQueryVariable('result');
-      const message = document.getElementById('message');
+      const message = document.getElementById('ending-message');
       if (result === 'win') {
         message.textContent = "You've successfully protected your wage and village!";
       } else {

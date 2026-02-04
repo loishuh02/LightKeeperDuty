@@ -141,24 +141,6 @@ body.dayone::after {
     transform: scale(1.06);
 }
 
-
-
-/*
-.amatic-sc-regular {
-  font-family: "Amatic SC", sans-serif;
-  font-weight: 400;
-  font-style: normal;
-}
-
-.amatic-sc-bold {
-  font-family: "Amatic SC", sans-serif;
-  font-weight: 700;
-  font-style: normal;
-}
-  */
-
-
-
 #homepage_instruction_one {
     position: absolute;
     top: 50%;
@@ -199,7 +181,7 @@ body.instructions-page {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Georgia', 'Times New Roman', serif;
+    font-family: 'Annie Use Your Telescope', cursive; /* Using Annie Use Your Telescope font */
 }
 
 #instructions-container {
@@ -212,20 +194,22 @@ body.instructions-page {
 #instructions-text {
     margin-bottom: 60px;
     line-height: 1.8;
-    font-size: 1.1em;
+    font-size: 2em;
     margin: 25px 0;
     color: #000000;
+    font-weight: 400;
 }
 
 #start-shift-btn {
     background-color: #c7995b;
     border: 3px solid #9e7745;
     color: white;
-    font-size: 1.5em;
+    font-size: 1.8em;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-weight: 400;
     padding: 15px 40px;
     border-radius: 10px;
     cursor: pointer;
-    font-weight: bold;
     transition: all 0.3s ease;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
 }
@@ -237,5 +221,64 @@ body.instructions-page {
 }
 
 #start-shift-btn:active {
+    transform: scale(0.98);
+}
+
+/* Ending Page Styling - Uses Homepage Background */
+body.ending-page {
+    background-image: url('images/homepage_background.png');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    background-attachment: fixed;
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#ending-container {
+    background: rgba(0, 0, 0, 0.7); /* Semi-transparent dark background */
+    padding: 50px 60px;
+    border-radius: 15px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    text-align: center;
+    max-width: 700px;
+    width: 85%;
+}
+
+.ending-text {
+    font-size: 2.2em;
+    color: #FFFFFF;
+    margin-bottom: 40px;
+    line-height: 1.4;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+#ending-container button {
+    background-color: #c7995b;
+    border: 3px solid #9e7745;
+    color: white;
+    font-size: 1.3em;
+    padding: 12px 35px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+#ending-container button:hover {
+    background-color: #d4a865;
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6);
+}
+
+#ending-container button:active {
     transform: scale(0.98);
 }
