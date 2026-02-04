@@ -17,15 +17,12 @@ body {
 }
 
 body.dayone {
-    /* Ocean color is a gradient layer. JS can animate the --ocean-top and --ocean-bottom vars. */
+    /* Color variables: ocean and sky (JS can animate ocean vars). Ocean height is adjustable via --ocean-height. */
     --ocean-top: #001a33;
     --ocean-bottom: #003b5c;
-    /* gradient only — the scene image is placed in a top layer so the canvas underneath can show through transparent areas */
-    background-image: linear-gradient(var(--ocean-top), var(--ocean-bottom));
-    background-repeat: no-repeat;
-    background-position-y: 0px;
-    background-size: 100% auto;
-    background-blend-mode: normal;
+    --ocean-height: 65vh; /* default bottom 2/5 of viewport */
+    --sky-top: #88c7ff; /* light sky */
+    --sky-bottom: #1e3a66; /* deep sky at bottom */
     position: relative;
     overflow: hidden;
 }
@@ -40,8 +37,96 @@ body.dayone::before {
     background-position: top center;
     background-size: 100% auto;
     z-index: 2;
-    pointer-events: none; /* allow clicks to pass through to the canvas buttons underneath */
+    pointer-events: none; /* allow clicks to pass through to the canvas/fallback, but DOM buttons live in front */
 }
+
+/* Sky layer (very back): covers full viewport and sits behind everything */
+#sky-layer {
+    position: fixed;
+    inset: 0;
+    z-index: -1; /* behind ocean (::after 0), canvas (1), overlay (2), UI (3) */
+    pointer-events: none;
+    background: linear-gradient(var(--sky-top), var(--sky-bottom));
+    background-size: cover;
+}
+
+/* Bottom ocean layer: fixed element occupying the bottom of the viewport (height controlled by --ocean-height) */
+body.dayone::after {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--ocean-height, 40vh); /* bottom area of the viewport */
+    background: linear-gradient(var(--ocean-top), var(--ocean-bottom));
+    background-repeat: no-repeat;
+    background-size: cover;
+    z-index: 0; /* below canvas (canvas will be z-index:1) */
+    pointer-events: none;
+}
+
+/* Foreground DOM UI for buttons (frontmost layer) */
+#ui-buttons {
+    position: fixed;
+    inset: 0;
+    z-index: 3; /* frontmost: buttons */
+    pointer-events: none; /* allow default pass-through; each button will enable pointer events */
+}
+
+/* Danger flash overlay: subtle pulsing red outline around viewport when events near failure */
+#danger-flash {
+    position: fixed;
+    inset: 0;
+    z-index: 4; /* above UI buttons */
+    pointer-events: none;
+    box-sizing: border-box;
+    border: 3px solid rgba(255,0,0,0);
+    border-radius: 6px;
+}
+
+#danger-flash.pulse {
+    animation: dangerPulse 1s ease-in-out infinite;
+}
+
+@keyframes dangerPulse {
+    0% {
+        border-color: rgba(255,0,0,0);
+        box-shadow: 0 0 0 0 rgba(255,0,0,0);
+    }
+    40% {
+        border-color: rgba(255,0,0,0.18);
+        box-shadow: 0 0 18px 6px rgba(255,0,0,0.05);
+    }
+    100% {
+        border-color: rgba(255,0,0,0);
+        box-shadow: 0 0 0 0 rgba(255,0,0,0);
+    }
+}
+
+/* Individual button images placed absolutely in the container */
+.ui-btn {
+    position: absolute;
+    display: block;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.9);
+    padding: 8px;
+    box-sizing: border-box;
+    transition: transform 150ms ease, filter 150ms ease, box-shadow 150ms ease;
+    pointer-events: auto; /* make this element interactive */
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.ui-btn:hover {
+    transform: scale(1.15);
+    filter: brightness(1.03);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.ui-btn:active {
+    transform: scale(1.06);
+}
+
 
 
 /*

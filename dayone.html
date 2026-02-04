@@ -10,9 +10,16 @@
   <title>Day One</title>
 
   <body class="dayone">
+    <div id="sky-layer" aria-hidden="true"></div>
     <main>
     </main>
 
-    <script src="sketch.js"></script>
+    <!-- Foreground UI buttons container (buttons will be placed here and sit above the background overlay) -->
+    <div id="ui-buttons" aria-label="game buttons"></div>
+
+    <!-- Danger flash overlay (appears as a subtle red outline when events near failure) -->
+    <div id="danger-flash" aria-hidden="true"></div>
+
+    <script src="sketch.js"></script> 
   </body>
 </html>
