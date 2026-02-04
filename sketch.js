@@ -4,14 +4,14 @@ let dayone = isActive;
 
 // Images
 let lightImg, boatImg, sirenImg, sleepImg;
-let smokeImg, fallingBoatImg, starfishImg;
+let smokeImg, fallingBoatImg, tsunamiImg;
 
 // Buttons
 let buttons = []; // objects: {id, img, x,y,w,h}
 
 // Falling objects
 let falling = []; // array of {type, img, x, y, startY, endY, startW, endW, speed}
-let spawnOrder = ['smoke', 'boat', 'starfish'];
+let spawnOrder = ['smoke', 'boat', 'tsunami'];
 let nextSpawnIndex = 0;
 let spawnInterval = 5000; // 5 seconds
 let lastSpawnTime = 0;
@@ -73,7 +73,7 @@ function preload() {
   // assets for threats
   smokeImg = loadImage('images/smoke monster.png');
   fallingBoatImg = loadImage('images/boat.png');
-  starfishImg = loadImage('images/starfish.avif');
+  // tsunami will be drawn programmatically
 }
 
 function setup() {
@@ -147,7 +147,7 @@ function setupButtons() {
   // positions are responsive; include asset path strings to create DOM elements
   buttons.push(makeBtn('smoke-light', lightImg, width * 0.18, 'images/light_icon.png'));
   buttons.push(makeBtn('boat-boat', boatImg, width * 0.38, 'images/boat_icon.png'));
-  buttons.push(makeBtn('siren-starfish', sirenImg, width * 0.58, 'images/siren_icon.png'));
+  buttons.push(makeBtn('siren-tsunami', sirenImg, width * 0.58, 'images/siren_icon.png'));
   buttons.push(makeBtn('sleep', sleepImg, width * 0.78, 'images/sleep_icon.png'));
 
   // create or update DOM button elements
@@ -246,7 +246,7 @@ function spawnNext() {
 
   let img;
   if (typ === 'boat') img = fallingBoatImg;
-  else img = starfishImg;
+  else img = null; // tsunami will be drawn programmatically
 
   // slower speeds so objects descend much more slowly
   const speed = random(0.4, 1.0);
@@ -293,8 +293,91 @@ function drawFalling() {
     const w = lerp(f.startW, f.endW, t);
     const h = lerp(f.startH, f.endH, t);
 
-    image(f.img, f.x - w / 2, f.y - h / 2, w, h);
+    // If tsunami, draw waves instead of image
+    if (f.type === 'tsunami') {
+      drawTsunami(f.x, f.y, w, h, t);
+    } else if (f.img) {
+      image(f.img, f.x - w / 2, f.y - h / 2, w, h);
+    }
   }
+}
+
+// Draw tsunami as three flat overlapping wave shapes that pulse in height
+function drawTsunami(x, y, w, h, progress) {
+  push();
+  
+  // Three wave layers, full screen width
+  const waveWidth = width;
+  const baseHeight = h * 1.5; // base height of each wave
+  
+  // Pulsing animation - height increases and decreases
+  const pulseSpeed = 0.003; // speed of the pulse
+  const pulseAmount = 0.3; // how much the height changes (30% of base height)
+  const pulse = sin(millis() * pulseSpeed) * pulseAmount + 1; // oscillates between 0.7 and 1.3
+  
+  for (let layer = 0; layer < 3; layer++) {
+    const layerOffset = layer * 20; // vertical offset between layers
+    const waveY = y + layerOffset;
+    const currentHeight = baseHeight * pulse;
+    
+    // Colors get lighter/whiter as waves approach (higher progress)
+    const blueIntensity = map(progress, 0, 1, 40, 180);
+    const greenIntensity = map(progress, 0, 1, 80, 200);
+    const whiteIntensity = map(progress, 0, 1, 100, 240);
+    
+    // Each layer slightly different color for depth
+    const layerBrightness = map(layer, 0, 2, 0.7, 1.0);
+    
+    fill(
+      blueIntensity * layerBrightness,
+      greenIntensity * layerBrightness,
+      whiteIntensity * layerBrightness,
+      map(layer, 0, 2, 200, 140) // back layers more transparent
+    );
+    noStroke();
+    
+    // Draw flat wave shape
+    beginShape();
+    
+    // Top edge of wave - create gentle curves across the screen
+    const segments = 30;
+    for (let i = 0; i <= segments; i++) {
+      const segX = (waveWidth / segments) * i;
+      // Gentle sine wave for the top edge
+      const waveOffset = sin((i / segments) * TWO_PI * 2 + (layer * 0.5)) * (currentHeight * 0.15);
+      const segY = waveY - (currentHeight / 2) + waveOffset;
+      
+      if (i === 0) {
+        vertex(segX, segY);
+      } else {
+        vertex(segX, segY);
+      }
+    }
+    
+    // Bottom edge - straight line across to close the shape
+    vertex(waveWidth, waveY + (currentHeight / 2));
+    vertex(0, waveY + (currentHeight / 2));
+    
+    endShape(CLOSE);
+    
+    // Add white foam/highlight on top edge for closer waves
+    if (progress > 0.4) {
+      stroke(255, 255, 255, 180 * layerBrightness);
+      strokeWeight(2 + progress * 2);
+      noFill();
+      
+      beginShape();
+      for (let i = 0; i <= segments; i++) {
+        const segX = (waveWidth / segments) * i;
+        const waveOffset = sin((i / segments) * TWO_PI * 2 + (layer * 0.5)) * (currentHeight * 0.15);
+        const segY = waveY - (currentHeight / 2) + waveOffset;
+        vertex(segX, segY);
+      }
+      endShape();
+    }
+  }
+  
+  pop();
 }
 
 // Fog updates darkness and handles fade-out behavior
@@ -368,6 +451,7 @@ function handleButtonClick(id) {
       fog.fadeOut = true;
       // mark success immediately; the fog will visually fade out soon
       successCount++;
+      brightenSky(); // brighten sky after resolving event
       if (successCount >= requiredSuccess) waitingForSleep = true;
     }
     return;
@@ -377,7 +461,7 @@ function handleButtonClick(id) {
   let expectedType = null;
   if (id === 'smoke-light') expectedType = 'smoke';
   if (id === 'boat-boat') expectedType = 'boat';
-  if (id === 'siren-starfish') expectedType = 'starfish';
+  if (id === 'siren-tsunami') expectedType = 'tsunami';
 
   if (!expectedType) return;
 
@@ -387,6 +471,7 @@ function handleButtonClick(id) {
       // clicked correct button for an active threat -> remove
       falling.splice(i, 1);
       successCount++;
+      brightenSky(); // brighten sky after resolving event
       lastSpawnTime = millis();
       if (successCount >= requiredSuccess) {
         waitingForSleep = true;
@@ -419,6 +504,71 @@ function startBrightening() {
       waitingForSleep = true;
     }
   }, 40);
+}
+
+// Brighten the sky incrementally after each successful event
+function brightenSky() {
+  const totalEvents = requiredSuccess; // 3 events total
+  
+  // Target colors (final bright sky)
+  const targetTop = [0x88, 0xc7, 0xff]; // #88c7ff
+  const targetBottom = [0x1e, 0x3a, 0x66]; // #1e3a66
+  
+  // Get current sky colors from body element
+  const currentTopHex = getComputedStyle(document.body).getPropertyValue('--sky-top').trim();
+  const currentBottomHex = getComputedStyle(document.body).getPropertyValue('--sky-bottom').trim();
+  
+  console.log('Current sky top:', currentTopHex, 'bottom:', currentBottomHex); // Debug
+  
+  // Parse current colors
+  const fromTop = hexToRgbArray(currentTopHex);
+  const fromBottom = hexToRgbArray(currentBottomHex);
+  
+  // Calculate target brightness for this event (incremental)
+  const targetProgress = successCount / totalEvents;
+  const toTop = [
+    Math.round(targetTop[0] * targetProgress),
+    Math.round(targetTop[1] * targetProgress),
+    Math.round(targetTop[2] * targetProgress)
+  ];
+  const toBottom = [
+    Math.round(targetBottom[0] * targetProgress),
+    Math.round(targetBottom[1] * targetProgress),
+    Math.round(targetBottom[2] * targetProgress)
+  ];
+  
+  console.log('Animating sky to:', toTop, toBottom, 'Progress:', targetProgress); // Debug
+  
+  // Animate from current to new target
+  let steps = 40;
+  let step = 0;
+  
+  const interval = setInterval(() => {
+    step++;
+    const t = step / steps;
+    const top = lerpColorHex(fromTop, toTop, t);
+    const bottom = lerpColorHex(fromBottom, toBottom, t);
+    document.body.style.setProperty('--sky-top', top);
+    document.body.style.setProperty('--sky-bottom', bottom);
+    
+    if (step >= steps) {
+      clearInterval(interval);
+      console.log('Sky brightening complete'); // Debug
+    }
+  }, 30);
+}
+
+// Helper to convert hex color to RGB array
+function hexToRgbArray(hex) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+  return [
+    parseInt(hex.substring(0, 2), 16),
+    parseInt(hex.substring(2, 4), 16),
+    parseInt(hex.substring(4, 6), 16)
+  ];
 }
 
 // Danger overlay control

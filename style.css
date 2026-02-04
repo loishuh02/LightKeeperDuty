@@ -1,4 +1,3 @@
-
 main {
     text-align: center;
     margin-top: 15vh;
@@ -21,8 +20,10 @@ body.dayone {
     --ocean-top: #001a33;
     --ocean-bottom: #003b5c;
     --ocean-height: 65vh; /* default bottom 2/5 of viewport */
-    --sky-top: #88c7ff; /* light sky */
-    --sky-bottom: #1e3a66; /* deep sky at bottom */
+    --sky-top: #000000; /* starts black, brightens after each event */
+    --sky-bottom: #000000; /* starts black, brightens after each event */
+    --sky-target-top: #88c7ff; /* final light sky color */
+    --sky-target-bottom: #1e3a66; /* final deep sky color */
     position: relative;
     overflow: hidden;
 }
@@ -77,10 +78,10 @@ body.dayone::after {
 #danger-flash {
     position: fixed;
     inset: 0;
-    z-index: 4; /* above UI buttons */
+    z-index: 9999; /* above all other elements */
     pointer-events: none;
     box-sizing: border-box;
-    border: 3px solid rgba(255,0,0,0);
+    border: 8px solid rgba(255,0,0,0);
     border-radius: 6px;
 }
 
@@ -90,16 +91,16 @@ body.dayone::after {
 
 @keyframes dangerPulse {
     0% {
-        border-color: rgba(255,0,0,0);
-        box-shadow: 0 0 0 0 rgba(255,0,0,0);
+        border-color: rgba(255,0,0,0.5);
+        box-shadow: inset 0 0 50px 15px rgba(255,0,0,0.3);
     }
-    40% {
-        border-color: rgba(255,0,0,0.18);
-        box-shadow: 0 0 18px 6px rgba(255,0,0,0.05);
+    50% {
+        border-color: rgba(255,0,0,1);
+        box-shadow: inset 0 0 80px 20px rgba(255,0,0,0.5);
     }
     100% {
-        border-color: rgba(255,0,0,0);
-        box-shadow: 0 0 0 0 rgba(255,0,0,0);
+        border-color: rgba(255,0,0,0.5);
+        box-shadow: inset 0 0 50px 15px rgba(255,0,0,0.3);
     }
 }
 
