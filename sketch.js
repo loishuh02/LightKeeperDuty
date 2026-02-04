@@ -1,5 +1,17 @@
 // Game state
-const isActive = (document.body && document.body.classList && document.body.classList.contains('dayone')) || window.location.pathname.endsWith('dayone.html');
+const pathName = window.location.pathname.toLowerCase();
+const isActive = (document.body && document.body.classList && document.body.classList.contains('dayone')) || 
+                 pathName.includes('dayone.html') ||
+                 pathName.includes('daytwo.html') ||
+                 pathName.includes('daythree.html');
+
+// Detect which day for difficulty scaling
+let currentDay = 1;
+if (pathName.includes('daytwo.html')) currentDay = 2;
+if (pathName.includes('daythree.html')) currentDay = 3;
+
+console.log('Current day detected:', currentDay, 'Path:', pathName);
+
 let dayone = isActive;
 
 // Images
@@ -13,8 +25,13 @@ let buttons = []; // objects: {id, img, x,y,w,h}
 let falling = []; // array of {type, img, x, y, startY, endY, startW, endW, speed}
 let spawnOrder = ['smoke', 'boat', 'tsunami'];
 let nextSpawnIndex = 0;
-let spawnInterval = 5000; // 5 seconds
+// *** TIME LIMIT: Time between events - gets shorter each day ***
+// Day 1: 5000ms, Day 2: 3500ms, Day 3: 2500ms
+let spawnInterval = 5000 - (currentDay - 1) * 1500; 
 let lastSpawnTime = 0;
+
+// Stars in the sky
+let stars = [];
 
 // Size controls (change these values to adjust appearance)
 const fallingSizeConfig = {
@@ -55,7 +72,10 @@ let fog = {
   circles: [],
   darkness: 0,
   maxDarkness: 0.92,
-  darkenRate: 0.006,
+  // *** TIME LIMIT: How fast fog darkens - Day 1: ~5 sec, Day 2: ~4 sec, Day 3: ~3 sec ***
+  // Formula: maxDarkness / (targetSeconds * 60fps) = darkenRate per frame
+  // Day 1: 0.92 / (5 * 60) = 0.00307, Day 2: 0.92 / (4 * 60) = 0.00383, Day 3: 0.92 / (3 * 60) = 0.00511
+  darkenRate: currentDay === 1 ? 0.00307 : (currentDay === 2 ? 0.00383 : 0.00511),
   fadeOut: false,
   fadeRate: 0.02
 };
@@ -88,13 +108,24 @@ function setup() {
   canvas.style('position', 'fixed');
   imageMode(CORNER);
 
+  // Randomize event order
+  spawnOrder = shuffle(spawnOrder);
+  console.log('Event order:', spawnOrder);
+
+  // Create stars
+  createStars();
+
   setupButtons();
+  createDayCalendar(); // Create calendar as DOM element
   lastSpawnTime = millis();
 } 
 
 function draw() {
   if (!isActive) return;
   clear(); // keep canvas transparent so CSS background shows through
+
+  // Draw stars behind everything
+  drawStars();
 
   if (fog.active) {
     updateFog();
@@ -103,6 +134,7 @@ function draw() {
     updateFalling();
     drawFalling();
   }
+  
   drawButtons();
 
   // spawn sequence: spawn exactly three items, one every 5s, but only when no other event is in progress
@@ -123,12 +155,138 @@ function draw() {
   checkDangerConditions();
 } 
 
+// Create stars in the sky
+function createStars() {
+  stars = [];
+  const numStars = 150; // number of stars
+  for (let i = 0; i < numStars; i++) {
+    stars.push({
+      x: random(width),
+      y: random(0, height * 0.6), // stars in upper portion of screen
+      size: random(1, 3),
+      brightness: random(150, 255),
+      twinkleSpeed: random(0.02, 0.05),
+      twinkleOffset: random(TWO_PI)
+    });
+  }
+}
+
+// Draw stars with opacity based on sky brightness
+function drawStars() {
+  // Calculate star opacity based on how bright the sky is
+  const skyTopHex = getComputedStyle(document.body).getPropertyValue('--sky-top').trim();
+  const skyRgb = hexToRgbArray(skyTopHex);
+  const skyBrightness = (skyRgb[0] + skyRgb[1] + skyRgb[2]) / 3;
+  
+  // Stars fade as sky brightens (inverse relationship)
+  const starOpacity = map(skyBrightness, 0, 136, 255, 0); // 136 is average of target sky color
+  
+  for (let star of stars) {
+    // Twinkling effect
+    const twinkle = sin(millis() * star.twinkleSpeed + star.twinkleOffset) * 0.3 + 0.7;
+    const alpha = starOpacity * twinkle;
+    
+    fill(255, 255, 255, alpha);
+    noStroke();
+    ellipse(star.x, star.y, star.size, star.size);
+    
+    // Larger stars get a subtle glow
+    if (star.size > 2) {
+      fill(255, 255, 255, alpha * 0.3);
+      ellipse(star.x, star.y, star.size * 2, star.size * 2);
+    }
+  }
+}
+
+// Create day calendar indicator as DOM element (sticky note style)
+function createDayCalendar() {
+  const container = document.getElementById('ui-buttons');
+  if (!container) return;
+  
+  // Calendar size and position
+  const calendarSize = Math.min(120, window.innerWidth * 0.1);
+  const x = 40;
+  const y = window.innerHeight - calendarSize - 40;
+  
+  // Create calendar container
+  const calendar = document.createElement('div');
+  calendar.id = 'day-calendar';
+  calendar.style.position = 'fixed';
+  calendar.style.left = x + 'px';
+  calendar.style.top = y + 'px';
+  calendar.style.width = calendarSize + 'px';
+  calendar.style.height = calendarSize + 'px';
+  calendar.style.backgroundColor = '#F5F5DC'; // Softer beige (less saturated)
+  calendar.style.border = '2px solid rgba(0, 0, 0, 0.3)'; // Lighter border
+  calendar.style.borderRadius = '5px';
+  calendar.style.boxShadow = '3px 3px 6px rgba(0, 0, 0, 0.2)'; // Softer shadow
+  calendar.style.zIndex = '5'; // Above buttons (z-index: 3)
+  calendar.style.pointerEvents = 'none';
+  calendar.style.display = 'flex';
+  calendar.style.flexDirection = 'column';
+  calendar.style.overflow = 'hidden';
+  calendar.style.opacity = '0.9'; // Slightly transparent to blend better
+  
+  // Create header (muted yellow bar)
+  const header = document.createElement('div');
+  header.style.backgroundColor = '#D4AF87'; // Muted tan/camel color
+  header.style.height = '28%';
+  header.style.display = 'flex';
+  header.style.alignItems = 'center';
+  header.style.justifyContent = 'center';
+  header.style.color = '#FFFFFF';
+  header.style.fontWeight = 'bold';
+  header.style.fontSize = (calendarSize * 0.16) + 'px';
+  header.style.fontFamily = 'Arial, sans-serif';
+  header.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.3)';
+  header.textContent = 'DAY';
+  
+  // Create number display
+  const number = document.createElement('div');
+  number.style.flex = '1';
+  number.style.display = 'flex';
+  number.style.alignItems = 'center';
+  number.style.justifyContent = 'center';
+  number.style.color = '#4A4A4A'; // Muted gray (less harsh)
+  number.style.fontWeight = 'bold';
+  number.style.fontSize = (calendarSize * 0.5) + 'px';
+  number.style.fontFamily = 'Arial, sans-serif';
+  number.textContent = currentDay.toString();
+  
+  calendar.appendChild(header);
+  calendar.appendChild(number);
+  document.body.appendChild(calendar);
+  
+  console.log('Calendar created for day:', currentDay);
+}
+
 function setupButtons() {
   buttons = [];
-  // define button size
-  const bw = min(110, width * 0.08);
+  
+  // *** BUTTON SIZE AND SPACING - ADJUST THESE VALUES ***
+  const buttonSizePercent = 0.08; // Button size as percentage of screen width (0.08 = 8%)
+  const maxButtonSize = 110; // Maximum button size in pixels
+  const bottomMargin = 40; // Distance from bottom of screen in pixels
+  
+  // *** BUTTON HORIZONTAL POSITIONS - CENTERED AROUND SCREEN MIDDLE ***
+  // Buttons are positioned relative to center (0.5)
+  // Current spacing: 0.17 between each button
+  const centerX = 0.5; // Screen center
+  const buttonSpacing = 0.17; // Space between buttons (keep this for current spacing)
+  
+  const button1Position = centerX - (buttonSpacing * 1.5); // 0.245 (left of center)
+  const button2Position = centerX - (buttonSpacing * 0.5); // 0.415 (slightly left)
+  const button3Position = centerX + (buttonSpacing * 0.5); // 0.585 (slightly right)
+  const button4Position = centerX + (buttonSpacing * 1.5); // 0.755 (right of center)
+  
+  // To adjust spacing: change buttonSpacing value
+  // Smaller value (e.g., 0.12) = buttons closer together
+  // Larger value (e.g., 0.20) = buttons more spread out
+  
+  // Calculate button dimensions
+  const bw = min(maxButtonSize, width * buttonSizePercent);
   const bh = bw;
-  const baseY = height - bh - 40;
+  const baseY = height - bh - bottomMargin;
 
   // helper to create button objects with path for DOM img
   function makeBtn(id, img, x, path) {
@@ -144,11 +302,11 @@ function setupButtons() {
     };
   }
 
-  // positions are responsive; include asset path strings to create DOM elements
-  buttons.push(makeBtn('smoke-light', lightImg, width * 0.18, 'images/light_icon.png'));
-  buttons.push(makeBtn('boat-boat', boatImg, width * 0.38, 'images/boat_icon.png'));
-  buttons.push(makeBtn('siren-tsunami', sirenImg, width * 0.58, 'images/siren_icon.png'));
-  buttons.push(makeBtn('sleep', sleepImg, width * 0.78, 'images/sleep_icon.png'));
+  // Create buttons with centered positions
+  buttons.push(makeBtn('smoke-light', lightImg, width * button1Position, 'images/light_icon.png'));
+  buttons.push(makeBtn('boat-boat', boatImg, width * button2Position, 'images/boat_icon.png'));
+  buttons.push(makeBtn('siren-tsunami', sirenImg, width * button3Position, 'images/siren_icon.png'));
+  buttons.push(makeBtn('sleep', sleepImg, width * button4Position, 'images/sleep_icon.png'));
 
   // create or update DOM button elements
   createButtonElements();
@@ -248,8 +406,10 @@ function spawnNext() {
   if (typ === 'boat') img = fallingBoatImg;
   else img = null; // tsunami will be drawn programmatically
 
-  // slower speeds so objects descend much more slowly
-  const speed = random(0.4, 1.0);
+  // *** TIME LIMIT: Speed of falling objects - gets faster each day ***
+  // Day 1: 0.4-1.0, Day 2: 0.6-1.3, Day 3: 0.8-1.6
+  const baseSpeed = 0.4 + (currentDay - 1) * 0.2;
+  const speed = random(baseSpeed, baseSpeed + 0.6);
 
   // configure start and end sizes (you can tweak fallingSizeConfig)
   falling.push({
@@ -315,25 +475,42 @@ function drawTsunami(x, y, w, h, progress) {
   const pulseAmount = 0.3; // how much the height changes (30% of base height)
   const pulse = sin(millis() * pulseSpeed) * pulseAmount + 1; // oscillates between 0.7 and 1.3
   
+  // Ocean base colors: #001a33 (top) and #003b5c (bottom)
+  // RGB: (0, 26, 51) and (0, 59, 92)
+  const oceanR = 0;
+  const oceanG_base = 26;
+  const oceanB_base = 51;
+  
   for (let layer = 0; layer < 3; layer++) {
     const layerOffset = layer * 20; // vertical offset between layers
     const waveY = y + layerOffset;
     const currentHeight = baseHeight * pulse;
     
-    // Colors get lighter/whiter as waves approach (higher progress)
-    const blueIntensity = map(progress, 0, 1, 40, 180);
-    const greenIntensity = map(progress, 0, 1, 80, 200);
-    const whiteIntensity = map(progress, 0, 1, 100, 240);
+    // Base wave (layer 0) uses ocean color
+    // Other layers vary the green and blue values
+    let r, g, b, alpha;
     
-    // Each layer slightly different color for depth
-    const layerBrightness = map(layer, 0, 2, 0.7, 1.0);
+    if (layer === 0) {
+      // Base layer - ocean color, gets slightly lighter as it approaches
+      r = oceanR + progress * 20;
+      g = oceanG_base + progress * 30;
+      b = oceanB_base + progress * 40;
+      alpha = 200;
+    } else if (layer === 1) {
+      // Middle layer - lighter variant
+      r = oceanR + progress * 30;
+      g = oceanG_base + 15 + progress * 40;
+      b = oceanB_base + 25 + progress * 50;
+      alpha = 180;
+    } else {
+      // Front layer - lightest variant
+      r = oceanR + progress * 40;
+      g = oceanG_base + 30 + progress * 50;
+      b = oceanB_base + 40 + progress * 60;
+      alpha = 160;
+    }
     
-    fill(
-      blueIntensity * layerBrightness,
-      greenIntensity * layerBrightness,
-      whiteIntensity * layerBrightness,
-      map(layer, 0, 2, 200, 140) // back layers more transparent
-    );
+    fill(r, g, b, alpha);
     noStroke();
     
     // Draw flat wave shape
@@ -362,6 +539,7 @@ function drawTsunami(x, y, w, h, progress) {
     
     // Add white foam/highlight on top edge for closer waves
     if (progress > 0.4) {
+      const layerBrightness = map(layer, 0, 2, 0.7, 1.0);
       stroke(255, 255, 255, 180 * layerBrightness);
       strokeWeight(2 + progress * 2);
       noFill();
@@ -374,6 +552,26 @@ function drawTsunami(x, y, w, h, progress) {
         vertex(segX, segY);
       }
       endShape();
+    }
+    
+    // Draw simple white bubbles on top of the wave
+    const numBubbles = 15 + layer * 5; // more bubbles on front layers
+    const layerBrightness = map(layer, 0, 2, 0.7, 1.0);
+    
+    for (let b = 0; b < numBubbles; b++) {
+      // Position bubbles along the top edge
+      const bubbleProgress = (b / numBubbles) + (millis() * 0.0001 * (layer + 1)) % 1;
+      const bubbleX = bubbleProgress * waveWidth;
+      const waveOffset = sin((bubbleProgress) * TWO_PI * 2 + (layer * 0.5)) * (currentHeight * 0.15);
+      const bubbleY = waveY - (currentHeight / 2) + waveOffset;
+      
+      // Fixed bubble size (doesn't change with progress, only location animates)
+      const bubbleSize = 10 + layer * 2; // Slightly bigger on front layers
+      
+      // Simple white bubbles
+      fill(255, 255, 255, 180 * layerBrightness);
+      noStroke();
+      ellipse(bubbleX, bubbleY - bubbleSize, bubbleSize, bubbleSize);
     }
   }
   
@@ -439,8 +637,10 @@ function mousePressed() {
 function handleButtonClick(id) {
   if (id === 'sleep') {
     if (waitingForSleep) {
-      // success ending
-      endGame(true);
+      // Hide sleep prompt
+      hideSleepPrompt();
+      // Transition to next day or ending
+      transitionToNextDay();
     }
     return;
   }
@@ -502,6 +702,7 @@ function startBrightening() {
       clearInterval(interval);
       // fully brightened and waiting for sleep click
       waitingForSleep = true;
+      showSleepPrompt();
     }
   }, 40);
 }
@@ -614,6 +815,87 @@ function lerpColorHex(a, b, t) {
   return '#' + hex(r, 2) + hex(g, 2) + hex(bl, 2);
 }
 
+// Show sleep prompt text at bottom of screen
+function showSleepPrompt() {
+  let promptText = '';
+  if (currentDay === 1) {
+    promptText = "It's already morning. I should go to sleep for tomorrow.";
+  } else if (currentDay === 2) {
+    promptText = "It's already morning. I should go to sleep for tomorrow.";
+  } else if (currentDay === 3) {
+    promptText = "Finally done with these shifts. I can't wait to go back home.";
+  }
+  
+  // Create prompt element if it doesn't exist
+  let promptEl = document.getElementById('sleep-prompt');
+  if (!promptEl) {
+    promptEl = document.createElement('div');
+    promptEl.id = 'sleep-prompt';
+    promptEl.style.position = 'fixed';
+    promptEl.style.bottom = '150px'; // Above buttons (buttons are ~40px from bottom + button height)
+    promptEl.style.left = '50%';
+    promptEl.style.transform = 'translateX(-50%)';
+    promptEl.style.color = 'white';
+    promptEl.style.fontSize = '1.2em';
+    promptEl.style.textAlign = 'center';
+    promptEl.style.padding = '15px 30px';
+    promptEl.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    promptEl.style.borderRadius = '10px';
+    promptEl.style.zIndex = '10';
+    promptEl.style.opacity = '0';
+    promptEl.style.transition = 'opacity 1s ease-in';
+    document.body.appendChild(promptEl);
+  }
+  
+  promptEl.textContent = promptText;
+  
+  // Fade in
+  setTimeout(() => {
+    promptEl.style.opacity = '1';
+  }, 100);
+}
+
+// Hide sleep prompt
+function hideSleepPrompt() {
+  const promptEl = document.getElementById('sleep-prompt');
+  if (promptEl) {
+    promptEl.style.opacity = '0';
+    setTimeout(() => {
+      promptEl.remove();
+    }, 1000);
+  }
+}
+
+// Transition to next day with white fade effect
+function transitionToNextDay() {
+  // Create white fade overlay
+  const fadeEl = document.createElement('div');
+  fadeEl.id = 'white-fade';
+  fadeEl.style.position = 'fixed';
+  fadeEl.style.inset = '0';
+  fadeEl.style.backgroundColor = 'white';
+  fadeEl.style.opacity = '0';
+  fadeEl.style.zIndex = '9998';
+  fadeEl.style.transition = 'opacity 2s ease-in';
+  document.body.appendChild(fadeEl);
+  
+  // Fade to white
+  setTimeout(() => {
+    fadeEl.style.opacity = '1';
+  }, 100);
+  
+  // Navigate to next page after fade
+  setTimeout(() => {
+    if (currentDay === 1) {
+      window.location.href = 'daytwo.html';
+    } else if (currentDay === 2) {
+      window.location.href = 'daythree.html';
+    } else if (currentDay === 3) {
+      window.location.href = 'ending.html?result=win';
+    }
+  }, 2500);
+}
+
 function endGame(won) {
   // navigate to ending page with query param
   if (won) {
@@ -626,4 +908,23 @@ function endGame(won) {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   setupButtons();
+  
+  // Reposition calendar on resize
+  const calendar = document.getElementById('day-calendar');
+  if (calendar) {
+    const calendarSize = Math.min(120, window.innerWidth * 0.1);
+    const x = 40;
+    const y = window.innerHeight - calendarSize - 40;
+    
+    calendar.style.left = x + 'px';
+    calendar.style.top = y + 'px';
+    calendar.style.width = calendarSize + 'px';
+    calendar.style.height = calendarSize + 'px';
+    
+    // Update text sizes
+    const header = calendar.children[0];
+    const number = calendar.children[1];
+    if (header) header.style.fontSize = (calendarSize * 0.16) + 'px';
+    if (number) number.style.fontSize = (calendarSize * 0.5) + 'px';
+  }
 }

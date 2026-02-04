@@ -1,3 +1,11 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden; /* Prevent horizontal scroll */
+}
+
 main {
     text-align: center;
     margin-top: 15vh;
@@ -11,8 +19,12 @@ body {
     background-repeat: no-repeat;
     background-position: center;
     background-size: cover;
-    height: 100%;
-    background-position: center;
+    background-attachment: fixed; /* Keeps background fixed during scroll */
+    height: 100vh; /* Full viewport height */
+    width: 100vw; /* Full viewport width */
+    margin: 0; /* Remove default margin */
+    padding: 0; /* Remove default padding */
+    overflow: hidden; /* Prevent scrollbars */
 }
 
 body.dayone {
@@ -109,7 +121,8 @@ body.dayone::after {
     position: absolute;
     display: block;
     border-radius: 14px;
-    background: rgba(255,255,255,0.9);
+    background: #c7995b;
+    border: 3px solid #9e7745; /* 3px darker outline */
     padding: 8px;
     box-sizing: border-box;
     transition: transform 150ms ease, filter 150ms ease, box-shadow 150ms ease;
@@ -147,24 +160,82 @@ body.dayone::after {
 
 
 #homepage_instruction_one {
+    position: absolute;
     top: 50%;
     left: 50%;
-    position: absolute;
     transform: translate(-50%, -50%);
     font-size: 1.4em;
-    padding-left: 4%;
-    padding-right: 4%;
+    padding-left: 5%;
+    padding-right: 5%;
+    max-width: 90%; /* Prevent overflow on narrow screens */
+    box-sizing: border-box;
+    text-align: center;
 }
 
 #homepage_paragraph {
+    position: fixed; /* Changed from margin-top to fixed positioning */
+    bottom: 5vh; /* Always 5vh from bottom */
+    left: 50%;
+    transform: translateX(-50%);
     text-align: center;
-    margin-top: 50vh;
     font-size: .8em;
+    width: 90%; /* Prevent overflow */
+    max-width: 600px; /* Max width for readability */
+    box-sizing: border-box;
 }
 
 input{
     margin-top: 2vh;
-    font-size: 1em;
     font-size: 1.2em;
     padding: 0.5em;
+    max-width: 100%; /* Prevent input from overflowing */
+    box-sizing: border-box;
+}
+
+/* Instructions Page Styling */
+body.instructions-page {
+    background-color: #000000; /* Black background */
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Georgia', 'Times New Roman', serif;
+}
+
+#instructions-container {
+    max-width: 800px;
+    width: 90%;
+    padding: 40px;
+    text-align: center;
+}
+
+#instructions-text {
+    margin-bottom: 60px;
+    line-height: 1.8;
+    font-size: 1.1em;
+    margin: 25px 0;
+    color: #000000;
+}
+
+#start-shift-btn {
+    background-color: #c7995b;
+    border: 3px solid #9e7745;
+    color: white;
+    font-size: 1.5em;
+    padding: 15px 40px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+#start-shift-btn:hover {
+    background-color: #d4a865;
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6);
+}
+
+#start-shift-btn:active {
+    transform: scale(0.98);
 }
