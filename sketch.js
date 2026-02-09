@@ -83,6 +83,21 @@ let leverHandleCurrentY = 0; // Current Y position during drag
 let leverMaxDragDistance = 0; // Max distance handle can be dragged up
 let leverIntensity = 0; // 0 to 1, drives light opacity
 let lightCircleEl = null; // DOM element for the big yellow light circle
+let leverCompleted = false; // Flag to prevent multiple completion calls
+
+// Boat gate interaction state
+let boatGateInteractionActive = false;
+let boatGateButtonEl = null; // Reference to the boat gate button
+
+// Siren/knob interaction state
+let sirenInteractionActive = false;
+let sirenKnobContainer = null; // Container for the knob interface
+let sirenCorrectChannel = 0; // Random channel (1-13) that resolves the event
+let sirenCurrentChannel = 1; // Current channel position
+let sirenKnobAngle = 0; // Current angle of the knob
+let staticSound = null; // Radio static audio
+let sirenPromptEl = null; // Text prompt element
+let sirenCompleted = false; // Flag to prevent multiple completion calls
 
 // Fog event state — replaces smoke_monster behavior
 let fog = {
@@ -99,7 +114,7 @@ let fog = {
 };
 
 function isEventActive() {
-  return fog.active || falling.length > 0;
+  return fog.active || falling.length > 0 || leverInteractionActive || boatGateInteractionActive || sirenInteractionActive;
 } 
 
 function preload() {
@@ -119,6 +134,13 @@ function preload() {
   // To make them optional, comment out these lines
   leverHandleImg = loadImage('images/lever_handle.png');
   leverPanelImg = loadImage('images/lever_panel.png');
+  
+  // Audio for siren interaction
+  soundFormats('mp3');
+  staticSound = loadSound('audio/radio_static.mp3', 
+    () => console.log('Static sound loaded'),
+    (err) => {  }
+  );
 }
 
 function setup() {
@@ -134,19 +156,23 @@ function setup() {
   imageMode(CORNER);
 
   // *** RANDOMIZE EVENT ORDER ***
-  // Day 1: Only fog (no randomization needed)
-  // Day 2: Fog and boat (randomized)
-  // Day 3: All three events (randomized)
+  // Day 1: Only fog (1 event)
+  // Day 2: Fog AND boat (2 events total)
+  // Day 3: Fog AND boat AND tsunami (3 events total)
   if (currentDay === 1) {
-    spawnOrder = ['smoke']; // Only one event, no need to randomize
+    spawnOrder = ['smoke']; // Only fog
   } else if (currentDay === 2) {
+    // Both fog and boat, randomized order
     const day2Events = ['smoke', 'boat'];
-    spawnOrder = shuffle(day2Events); // Randomize order
+    spawnOrder = shuffle(day2Events);
   } else {
+    // All three events, randomized order
     const day3Events = ['smoke', 'boat', 'tsunami'];
-    spawnOrder = shuffle(day3Events); // Randomize order
+    spawnOrder = shuffle(day3Events);
   }
   console.log('Day', currentDay, '- Event order:', spawnOrder);
+  console.log('Required successes:', requiredSuccess);
+  console.log('Spawn interval:', spawnInterval, 'ms');
 
   // Create stars
   createStars();
@@ -158,6 +184,14 @@ function setup() {
     const lightButton = buttons.find(b => b.id === 'smoke-light');
     if (lightButton) {
       createLeverDecorations(lightButton.x, lightButton.y, lightButton.w, lightButton.h);
+    }
+  }
+  
+  // Create siren knob (always visible on game pages, next to siren button)
+  if (isActive) {
+    const sirenButton = buttons.find(b => b.id === 'siren-tsunami');
+    if (sirenButton) {
+      createPermanentSirenKnob(sirenButton.x, sirenButton.y, sirenButton.w, sirenButton.h);
     }
   }
   
@@ -185,6 +219,7 @@ function draw() {
   // spawn sequence: spawn exactly three items, one every 5s, but only when no other event is in progress
   if (!waitingForSleep && nextSpawnIndex < spawnOrder.length && !isEventActive()) {
     if (millis() - lastSpawnTime > spawnInterval) {
+      console.log('Spawning event', nextSpawnIndex + 1, 'of', spawnOrder.length, ':', spawnOrder[nextSpawnIndex]);
       spawnNext();
       lastSpawnTime = millis();
     }
@@ -316,14 +351,14 @@ function setupButtons() {
   // *** BUTTON HORIZONTAL POSITIONS - CENTERED AROUND SCREEN MIDDLE ***
   // Buttons are positioned relative to center (0.5)
   // Now 5 buttons total: Light, Boat, Boat Gate, Siren, Sleep
-  const centerX = 0.5; // Screen center
+  const centerX = 0.48; // Screen center
   const buttonSpacing = 0.14; // Space between buttons (adjusted for 5 buttons)
   
   const button1Position = centerX - (buttonSpacing * 2); // Light (leftmost)
-  const button2Position = centerX - (buttonSpacing * 1); // Boat
-  const button3Position = button2Position +.07; // Boat Gate (center)
-  const button4Position = centerX + (buttonSpacing * 1); // Siren/Tsunami
-  const button5Position = centerX + (buttonSpacing * 2); // Sleep (rightmost)
+  const button2Position = centerX - (buttonSpacing * 1) + 0.01; // Boat
+  const button3Position = button2Position + 0.078; // Boat Gate (center)
+  const button4Position = centerX + (buttonSpacing * 1) - 0.08; // Siren/Tsunami
+  const button5Position = centerX + (buttonSpacing * 2) - 0.02; // Sleep (rightmost)
   
   // To adjust spacing: change buttonSpacing value
   // Smaller value (e.g., 0.10) = buttons closer together
@@ -354,8 +389,16 @@ function setupButtons() {
   // Create buttons with centered positions
   buttons.push(makeBtn('smoke-light', lightImg, width * button1Position, 'images/light_icon.png'));
   buttons.push(makeBtn('boat-boat', boatImg, width * button2Position, 'images/boat_icon.png'));
-  // New Boat Gate button - text-based, green color
+  
+  // ========================================
+  // *** BOAT GATE BUTTON - ADJUST COLOR & TEXT HERE ***
+  // ========================================
+  // Parameters: makeBtn(id, img, x, path, isTextButton, buttonText, buttonColor)
+  // buttonText: Change the text displayed on the button
+  // buttonColor: Hex color code for button background (current: green #4a7c59)
+  //   Examples: '#4a7c59' = green, '#5a6c7d' = blue-gray, '#7c594a' = brown
   buttons.push(makeBtn('boat-gate', null, width * button3Position, null, true, 'Open Boat Gate', '#4a7c59'));
+  
   buttons.push(makeBtn('siren-tsunami', sirenImg, width * button4Position, 'images/siren_icon.png'));
   buttons.push(makeBtn('sleep', sleepImg, width * button5Position, 'images/sleep_icon.png'));
 
@@ -389,16 +432,20 @@ function createButtonElements() {
           elt.className = 'ui-btn ui-btn-text';
           elt.dataset.id = b.id;
           elt.textContent = b.buttonText;
-          elt.style.backgroundColor = b.buttonColor;
-          elt.style.display = 'flex';
-          elt.style.alignItems = 'center';
-          elt.style.justifyContent = 'center';
-          elt.style.fontSize = '0.75em';
-          elt.style.fontWeight = 'bold';
-          elt.style.color = 'white';
-          elt.style.textAlign = 'center';
-          elt.style.lineHeight = '1.2';
-          elt.style.padding = '8px';
+          
+          // ========== VISUAL: Text Button Styling ==========
+          elt.style.backgroundColor = b.buttonColor; // Background color
+          elt.style.display = 'flex'; // Flexbox layout
+          elt.style.alignItems = 'center'; // Center vertically
+          elt.style.justifyContent = 'center'; // Center horizontally
+          elt.style.fontSize = '0.75em'; // Font size
+          elt.style.fontWeight = 'bold'; // Font weight
+          elt.style.color = 'white'; // Text color
+          elt.style.textAlign = 'center'; // Text alignment
+          elt.style.lineHeight = '1.2'; // Line height
+          elt.style.padding = '8px'; // Internal spacing
+          // ================================================
+          
           elt.addEventListener('click', (e) => { e.stopPropagation(); handleButtonClick(b.id); });
           elt.addEventListener('touchstart', (e) => { elt.classList.add('touched'); });
           elt.addEventListener('touchend', (e) => { elt.classList.remove('touched'); });
@@ -450,27 +497,33 @@ function drawButtons() {
 function createLeverDecorations(lightButtonX, lightButtonY, buttonWidth, buttonHeight) {
   // Only create if lever images were successfully loaded
   if (!leverHandleImg || !leverPanelImg) {
-    console.log('Lever images not available - skipping lever decorations');
+    
     return;
   }
   
   const container = document.getElementById('ui-buttons');
   if (!container) return;
   
-  // *** LEVER PANEL POSITION - ADJUST THESE VALUES ***
-  const panelOffsetX = buttonWidth * 1.2; // Right of light button (negative = left, positive = right)
-  const panelOffsetY = -buttonHeight * 0.2; // Vertical offset (0 = aligned with button top)
-  const panelWidth = buttonWidth * 0.9; // Panel width relative to button
-  const panelHeight = buttonHeight * 1.4; // Panel height relative to button
+  // ========================================
+  // *** LEVER PANEL POSITION & SIZE - ADJUST THESE VALUES ***
+  // ========================================
+  const panelOffsetX = buttonWidth * 1; // Horizontal position: Right of light button (negative = left, positive = right)
+  const panelOffsetY = -buttonHeight * 0.2; // Vertical position: (0 = aligned with button top, negative = above, positive = below)
+  const panelWidth = buttonWidth * 0.9; // Width: Multiplier of button width (1.0 = same width as button)
+  const panelHeight = buttonHeight * 1.4; // Height: Multiplier of button height (1.0 = same height as button)
   
-  // *** LEVER HANDLE POSITION - ADJUST THESE VALUES ***
-  const handleOffsetX = buttonWidth * 1.3; // Position relative to light button
-  const handleOffsetY = -buttonHeight * 0.01; // Vertical offset (negative = above button)
-  const handleWidth = buttonWidth * 0.7; // Handle width
-  const handleHeight = buttonHeight * 1.0; // Handle height
+  // ========================================
+  // *** LEVER HANDLE POSITION & SIZE - ADJUST THESE VALUES ***
+  // ========================================
+  const handleOffsetX = buttonWidth * 1.1; // Horizontal position: Position relative to light button
+  const handleOffsetY = -buttonHeight * 0.01; // Vertical position: (negative = above button, positive = below)
+  const handleWidth = buttonWidth * 0.7; // Width: Multiplier of button width
+  const handleHeight = buttonHeight * 1.0; // Height: Multiplier of button height
   
+  // ========================================
   // *** LEVER DRAG SETTINGS - ADJUST MAX DRAG DISTANCE ***
-  const maxDragDistanceUp = buttonHeight * 0.3; // How far up the handle can be dragged (adjust this for goal position)
+  // ========================================
+  const maxDragDistanceUp = buttonHeight * 0.3; // How far up the handle can be dragged (larger = more drag distance)
   
   // Create or update lever panel
   let panelEl = document.getElementById('lever-panel');
@@ -536,7 +589,7 @@ function setupLeverDragEvents(handleEl) {
   };
   
   const onMouseMove = (e) => {
-    if (!isDragging) return;
+    if (!isDragging || leverCompleted) return;
     e.preventDefault();
     
     const deltaY = e.clientY - startY;
@@ -557,8 +610,9 @@ function setupLeverDragEvents(handleEl) {
     // Update light circle opacity
     updateLightCircle();
     
-    // Check if reached max position (100% intensity)
-    if (leverIntensity >= 0.99) {
+    // Check if reached max position (100% intensity) - only once
+    if (leverIntensity >= 0.99 && !leverCompleted) {
+      leverCompleted = true; // Set flag immediately to prevent multiple calls
       completeLeverInteraction();
     }
   };
@@ -586,7 +640,7 @@ function setupLeverDragEvents(handleEl) {
   });
   
   document.addEventListener('touchmove', (e) => {
-    if (!isDragging) return;
+    if (!isDragging || leverCompleted) return;
     e.preventDefault();
     
     const deltaY = e.touches[0].clientY - startY;
@@ -604,7 +658,8 @@ function setupLeverDragEvents(handleEl) {
     
     updateLightCircle();
     
-    if (leverIntensity >= 0.99) {
+    if (leverIntensity >= 0.99 && !leverCompleted) {
+      leverCompleted = true; // Set flag immediately to prevent multiple calls
       completeLeverInteraction();
     }
   });
@@ -620,10 +675,11 @@ function setupLeverDragEvents(handleEl) {
 // Start lever interaction (called after light button pressed)
 function startLeverInteraction() {
   leverInteractionActive = true;
+  leverCompleted = false; // Reset completion flag
   
   // Add glow to lever handle using drop-shadow filter (avoids outlining transparent PNG background)
   if (leverHandleEl) {
-    leverHandleEl.style.filter = 'drop-shadow(0 0 15px rgb(255, 213, 0)) brightness(1.3)';
+    leverHandleEl.style.filter = 'drop-shadow(0 0 15px rgba(255, 215, 0, 0.9)) brightness(1.3)';
   }
   
   // Create light circle
@@ -713,10 +769,639 @@ function completeLeverInteraction() {
   
   // Mark success and check if all events complete
   successCount++;
+  console.log('Event complete! successCount:', successCount, '/ requiredSuccess:', requiredSuccess);
   brightenSky();
   if (successCount >= requiredSuccess) {
+    console.log('All events complete! Showing sleep prompt.');
     waitingForSleep = true;
+    showSleepPrompt();
+  } else {
+    console.log('More events to come...');
   }
+}
+
+// ========== BOAT GATE INTERACTION ==========
+
+// Start boat gate interaction (called after boat button pressed)
+function startBoatGateInteraction() {
+  
+  boatGateInteractionActive = true;
+  
+  // Find and glow the boat gate button
+  boatGateButtonEl = buttons.find(b => b.id === 'boat-gate');
+  
+  if (boatGateButtonEl && boatGateButtonEl.el) {
+    boatGateButtonEl.el.style.boxShadow = '0 0 20px 8px rgba(74, 124, 89, 0.8)';
+    boatGateButtonEl.el.style.filter = 'brightness(1.3)';
+    
+  }
+  
+  
+}
+
+// Complete boat gate interaction
+function completeBoatGateInteraction() {
+  
+  
+  // Remove glow from boat gate button
+  if (boatGateButtonEl && boatGateButtonEl.el) {
+    boatGateButtonEl.el.style.boxShadow = '';
+    boatGateButtonEl.el.style.filter = '';
+  }
+  
+  // Remove the boat from falling array
+  for (let i = falling.length - 1; i >= 0; i--) {
+    if (falling[i].type === 'boat') {
+      falling.splice(i, 1);
+      break;
+    }
+  }
+  
+  boatGateInteractionActive = false;
+  
+  // Mark success
+  successCount++;
+  console.log('Boat gate complete! successCount:', successCount, '/ requiredSuccess:', requiredSuccess);
+  brightenSky();
+  lastSpawnTime = millis();
+  if (successCount >= requiredSuccess) {
+    console.log('All events complete! Showing sleep prompt.');
+    waitingForSleep = true;
+    showSleepPrompt();
+  } else {
+    console.log('More events to come...');
+  }
+}
+
+// ========== SIREN/KNOB INTERACTION ==========
+
+// Start siren interaction (called after siren button pressed)
+function startSirenInteraction() {
+  
+  sirenInteractionActive = true;
+  sirenCompleted = false; // Reset completion flag
+  
+  // Show tsunami prompt
+  showSirenPrompt("It's a tsunami! I should make an announcement.");
+  
+  // Assign random correct channel (1-13)
+  sirenCorrectChannel = floor(random(1, 14));
+  sirenCurrentChannel = 1;
+  sirenKnobAngle = 0;
+  
+  console.log('Siren interaction started - rotate knob to channel', sirenCorrectChannel);
+  
+  // Add glow to the permanent knob container
+  if (sirenKnobContainer) {
+    sirenKnobContainer.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.5), inset 0 2px 5px rgba(255, 255, 255, 0.1), 0 0 20px 8px rgba(255, 107, 53, 0.8)';
+  }
+  
+  // Start playing static sound if available
+  setTimeout(() => {
+    if (staticSound) {
+      
+      staticSound.loop();
+      staticSound.setVolume(0.3);
+    } else {
+      
+    }
+  }, 500);
+}
+
+// Create permanent siren knob next to siren button (always visible)
+function createPermanentSirenKnob(sirenButtonX, sirenButtonY, buttonWidth, buttonHeight) {
+  
+  // ========================================
+  // *** KNOB POSITION & SIZE - ADJUST THESE VALUES ***
+  // ========================================
+  const knobOffsetX = buttonWidth * 1.2; // Horizontal position: Right of siren button (negative = left, positive = right)
+  const knobOffsetY = -buttonHeight * 0.1; // Vertical position: (negative = above, positive = below)
+  const knobContainerSize = buttonWidth * 1.1; // Size: Multiplier of button width (1.8 = 1.8x button width)
+  
+  // ========================================
+  // *** KNOB COLORS - ADJUST THESE VALUES ***
+  // ========================================
+  const containerBackground = 'linear-gradient(145deg, #db8401, #7c5405)'; // Background gradient (dark brown)
+  const channelDisplayBg = '#0a0a0a'; // Channel display background (black)
+  const channelDisplayColor = '#ff6b35'; // Channel display text color (orange)
+  const knobPointerColor = '#ff6b35'; // Pointer color (orange)
+  
+  // Create container
+  const container = document.createElement('div');
+  container.id = 'siren-knob-permanent';
+  container.style.position = 'fixed';
+  container.style.left = (sirenButtonX + knobOffsetX) + 'px';
+  container.style.top = (sirenButtonY + knobOffsetY) + 'px';
+  container.style.width = knobContainerSize + 'px';
+  container.style.height = knobContainerSize + 'px';
+  
+  // ========== VISUAL: Container Styling ==========
+  container.style.background = containerBackground; // Background gradient color
+  container.style.borderRadius = '15px'; // Rounded corners
+  container.style.border = '3px solid rgba(255, 255, 255, 0.3)'; // Border to match buttons
+  container.style.padding = '1rem'; // Internal spacing
+  container.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.5), inset 0 2px 5px rgba(255, 255, 255, 0.1)'; // Shadow effects
+  // ===============================================
+  
+  container.style.zIndex = '3';
+  container.style.boxSizing = 'border-box';
+  container.style.pointerEvents = 'none'; // Initially not interactive
+  
+  // Create channel display
+  const display = document.createElement('div');
+  display.id = 'siren-channel-display-permanent';
+  display.textContent = 'CH 1';
+  display.style.position = 'absolute';
+  display.style.top = '0.5rem';
+  display.style.left = '50%';
+  display.style.transform = 'translateX(-50%)';
+  display.style.background = channelDisplayBg;
+  display.style.color = channelDisplayColor;
+  display.style.fontSize = '.85rem';
+  display.style.fontWeight = 'bold';
+  display.style.padding = '0.3rem 0.6rem';
+  display.style.borderRadius = '5px';
+  display.style.border = '2px solid #1a1a1a';
+  display.style.boxShadow = 'inset 0 0 10px rgba(255, 107, 53, 0.3)';
+  display.style.fontFamily = "'Courier New', monospace";
+  display.style.letterSpacing = '0.2rem';
+  display.style.textAlign = 'center';
+  display.style.minWidth = '3rem';
+  
+  // Create canvas for knob
+  const knobCanvas = document.createElement('canvas');
+  knobCanvas.id = 'siren-knob-canvas-permanent';
+  const canvasSize = knobContainerSize * 0.7;
+  knobCanvas.width = canvasSize;
+  knobCanvas.height = canvasSize;
+  knobCanvas.style.position = 'absolute';
+  knobCanvas.style.left = '50%';
+  knobCanvas.style.top = '60%';
+  knobCanvas.style.transform = 'translate(-50%, -50%)';
+  knobCanvas.style.cursor = 'pointer';
+  knobCanvas.style.pointerEvents = 'auto';
+  
+  container.appendChild(display);
+  container.appendChild(knobCanvas);
+  document.body.appendChild(container);
+  
+  sirenKnobContainer = container;
+  
+  // Draw initial knob
+  drawPermanentSirenKnob(knobCanvas);
+  
+  // Add interaction (only works when sirenInteractionActive is true)
+  setupPermanentSirenKnobInteraction(knobCanvas);
+}
+
+// Draw the permanent siren knob
+function drawPermanentSirenKnob(canvas) {
+  const ctx = canvas.getContext('2d');
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  const knobSize = canvas.width * 0.85;
+  const maxChannels = 13;
+  
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Outer rim shadow
+  ctx.fillStyle = '#140f0f';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, knobSize / 2 + 3, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Main knob body - metallic gradient
+  for (let i = knobSize; i > knobSize - 20; i -= 2) {
+    const c = map(i, knobSize - 20, knobSize, 180, 100);
+    ctx.fillStyle = `rgb(${c}, ${c - 10}, ${c - 20})`;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, i / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Inner knob face
+  ctx.fillStyle = '#3c3737';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, knobSize / 2 - 12, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw tick marks
+  ctx.strokeStyle = '#c8b496';
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < maxChannels; i++) {
+    const angle = map(i, 0, maxChannels, 0, Math.PI * 2);
+    const r1 = knobSize / 2 - 10;
+    const r2 = knobSize / 2 - 3;
+    const x1 = centerX + Math.cos(angle) * r1;
+    const y1 = centerY + Math.sin(angle) * r1;
+    const x2 = centerX + Math.cos(angle) * r2;
+    const y2 = centerY + Math.sin(angle) * r2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  
+  // Center circle
+  ctx.fillStyle = '#282323';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, knobSize * 0.12, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Pointer/indicator
+  ctx.strokeStyle = '#ff6b35';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  const pointerLength = knobSize * 0.3;
+  const pointerX = centerX + Math.cos(sirenKnobAngle) * pointerLength;
+  const pointerY = centerY + Math.sin(sirenKnobAngle) * pointerLength;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.lineTo(pointerX, pointerY);
+  ctx.stroke();
+  
+  // Center dot
+  ctx.fillStyle = '#ff6b35';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Setup interaction for permanent siren knob
+function setupPermanentSirenKnobInteraction(canvas) {
+  let isDragging = false;
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  
+  const updateKnob = (clientX, clientY) => {
+    if (!sirenInteractionActive) return; // Only interactive during siren event
+    if (sirenCompleted) return; // Don't update if already completed
+    
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = clientX - rect.left;
+    const mouseY = clientY - rect.top;
+    
+    // Calculate angle
+    sirenKnobAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+    
+    // Map to channel
+    let normalizedAngle = (sirenKnobAngle % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    sirenCurrentChannel = Math.floor(map(normalizedAngle, 0, Math.PI * 2, 1, 14));
+    if (sirenCurrentChannel > 13) sirenCurrentChannel = 13;
+    
+    // Update display
+    const display = document.getElementById('siren-channel-display-permanent');
+    if (display) {
+      display.textContent = 'CH ' + sirenCurrentChannel;
+    }
+    
+    // Redraw knob
+    drawPermanentSirenKnob(canvas);
+    
+    // Check if correct channel (only once)
+    if (sirenCurrentChannel === sirenCorrectChannel && !sirenCompleted) {
+      sirenCompleted = true; // Set flag immediately to prevent multiple calls
+      completeSirenInteraction();
+    }
+  };
+  
+  canvas.addEventListener('mousedown', (e) => {
+    if (!sirenInteractionActive || sirenCompleted) return;
+    isDragging = true;
+    updateKnob(e.clientX, e.clientY);
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      updateKnob(e.clientX, e.clientY);
+    }
+  });
+  
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+  
+  // Touch support
+  canvas.addEventListener('touchstart', (e) => {
+    if (!sirenInteractionActive || sirenCompleted) return;
+    e.preventDefault();
+    isDragging = true;
+    updateKnob(e.touches[0].clientX, e.touches[0].clientY);
+  });
+  
+  document.addEventListener('touchmove', (e) => {
+    if (isDragging) {
+      e.preventDefault();
+      updateKnob(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  });
+  
+  document.addEventListener('touchend', () => {
+    isDragging = false;
+  });
+}
+
+// Show siren prompt text
+function showSirenPrompt(text) {
+  let promptEl = document.getElementById('siren-prompt');
+  if (!promptEl) {
+    promptEl = document.createElement('div');
+    promptEl.id = 'siren-prompt';
+    promptEl.style.position = 'fixed';
+    promptEl.style.top = '20%';
+    promptEl.style.left = '50%';
+    promptEl.style.transform = 'translateX(-50%)';
+    
+    // ========== VISUAL: Siren Prompt Styling ==========
+    promptEl.style.color = 'white'; // Text color
+    promptEl.style.fontSize = '1.5em'; // Font size
+    promptEl.style.textAlign = 'center'; // Text alignment
+    promptEl.style.padding = '20px 40px'; // Internal spacing
+    promptEl.style.backgroundColor = 'rgba(0, 0, 0, 0.8)'; // Background color
+    promptEl.style.borderRadius = '10px'; // Rounded corners
+    promptEl.style.zIndex = '100';
+    promptEl.style.maxWidth = '80%'; // Maximum width
+    promptEl.style.opacity = '0'; // Start invisible
+    promptEl.style.transition = 'opacity 0.5s ease-in'; // Fade animation
+    // ==================================================
+    
+    document.body.appendChild(promptEl);
+  }
+  
+  sirenPromptEl = promptEl;
+  promptEl.textContent = text;
+  
+  setTimeout(() => {
+    promptEl.style.opacity = '1';
+  }, 100);
+}
+
+// Hide siren prompt
+function hideSirenPrompt() {
+  if (sirenPromptEl) {
+    sirenPromptEl.style.opacity = '0';
+    setTimeout(() => {
+      if (sirenPromptEl) {
+        sirenPromptEl.remove();
+        sirenPromptEl = null;
+      }
+    }, 500);
+  }
+}
+
+// Create the siren knob interface
+function createSirenKnob() {
+  // Create container
+  const container = document.createElement('div');
+  container.id = 'siren-knob-container';
+  container.style.position = 'fixed';
+  container.style.left = '50%';
+  container.style.top = '50%';
+  container.style.transform = 'translate(-50%, -50%)';
+  container.style.width = '400px';
+  container.style.height = '400px';
+  container.style.background = 'linear-gradient(145deg, #3a2f2f, #2a1f1f)';
+  container.style.borderRadius = '20px';
+  container.style.padding = '3rem';
+  container.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.5), inset 0 2px 10px rgba(255, 255, 255, 0.1), 0 0 20px 8px rgba(255, 107, 53, 0.6)';
+  container.style.zIndex = '50';
+  container.style.boxSizing = 'border-box';
+  
+  // Create channel display
+  const display = document.createElement('div');
+  display.id = 'siren-channel-display';
+  display.textContent = 'CH ' + sirenCurrentChannel;
+  display.style.position = 'absolute';
+  display.style.top = '2rem';
+  display.style.left = '50%';
+  display.style.transform = 'translateX(-50%)';
+  display.style.background = '#0a0a0a';
+  display.style.color = '#ff6b35';
+  display.style.fontSize = '2rem';
+  display.style.fontWeight = 'bold';
+  display.style.padding = '0.5rem 1rem';
+  display.style.borderRadius = '8px';
+  display.style.border = '3px solid #1a1a1a';
+  display.style.boxShadow = 'inset 0 0 20px rgba(255, 107, 53, 0.3), 0 0 10px rgba(0, 0, 0, 0.8)';
+  display.style.fontFamily = "'Courier New', monospace";
+  display.style.letterSpacing = '0.3rem';
+  display.style.textAlign = 'center';
+  
+  // Create canvas for knob
+  const knobCanvas = document.createElement('canvas');
+  knobCanvas.id = 'siren-knob-canvas';
+  knobCanvas.width = 250;
+  knobCanvas.height = 250;
+  knobCanvas.style.position = 'absolute';
+  knobCanvas.style.left = '50%';
+  knobCanvas.style.top = '55%';
+  knobCanvas.style.transform = 'translate(-50%, -50%)';
+  knobCanvas.style.cursor = 'pointer';
+  
+  container.appendChild(display);
+  container.appendChild(knobCanvas);
+  document.body.appendChild(container);
+  
+  sirenKnobContainer = container;
+  
+  // Draw initial knob
+  drawSirenKnob(knobCanvas);
+  
+  // Add interaction
+  setupSirenKnobInteraction(knobCanvas);
+}
+
+// Draw the siren knob on canvas
+function drawSirenKnob(canvas) {
+  const ctx = canvas.getContext('2d');
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  const knobSize = 180;
+  const maxChannels = 13;
+  
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Outer rim shadow
+  ctx.fillStyle = '#140f0f';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, knobSize / 2 + 5, 0, TWO_PI);
+  ctx.fill();
+  
+  // Main knob body - metallic gradient
+  for (let i = knobSize; i > knobSize - 30; i -= 2) {
+    const c = map(i, knobSize - 30, knobSize, 180, 100);
+    ctx.fillStyle = `rgb(${c}, ${c - 10}, ${c - 20})`;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, i / 2, 0, TWO_PI);
+    ctx.fill();
+  }
+  
+  // Inner knob face
+  ctx.fillStyle = '#3c3737';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, knobSize / 2 - 20, 0, TWO_PI);
+  ctx.fill();
+  
+  // Draw tick marks
+  ctx.strokeStyle = '#c8b496';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < maxChannels; i++) {
+    const angle = map(i, 0, maxChannels, 0, TWO_PI);
+    const r1 = knobSize / 2 - 15;
+    const r2 = knobSize / 2 - 5;
+    const x1 = centerX + Math.cos(angle) * r1;
+    const y1 = centerY + Math.sin(angle) * r1;
+    const x2 = centerX + Math.cos(angle) * r2;
+    const y2 = centerY + Math.sin(angle) * r2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  
+  // Center circle
+  ctx.fillStyle = '#282323';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, knobSize * 0.15, 0, TWO_PI);
+  ctx.fill();
+  
+  // Pointer/indicator
+  ctx.strokeStyle = '#ff6b35';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  const pointerLength = knobSize * 0.35;
+  const pointerX = centerX + Math.cos(sirenKnobAngle) * pointerLength;
+  const pointerY = centerY + Math.sin(sirenKnobAngle) * pointerLength;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.lineTo(pointerX, pointerY);
+  ctx.stroke();
+  
+  // Center dot
+  ctx.fillStyle = '#ff6b35';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 7, 0, TWO_PI);
+  ctx.fill();
+}
+
+// Setup interaction for siren knob
+function setupSirenKnobInteraction(canvas) {
+  let isDragging = false;
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  
+  const updateKnob = (clientX, clientY) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = clientX - rect.left;
+    const mouseY = clientY - rect.top;
+    
+    // Calculate angle
+    sirenKnobAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+    
+    // Map to channel
+    let normalizedAngle = (sirenKnobAngle % TWO_PI + TWO_PI) % TWO_PI;
+    sirenCurrentChannel = Math.floor(map(normalizedAngle, 0, TWO_PI, 1, 14));
+    if (sirenCurrentChannel > 13) sirenCurrentChannel = 13;
+    
+    // Update display
+    const display = document.getElementById('siren-channel-display');
+    if (display) {
+      display.textContent = 'CH ' + sirenCurrentChannel;
+    }
+    
+    // Redraw knob
+    drawSirenKnob(canvas);
+    
+    // Check if correct channel
+    if (sirenCurrentChannel === sirenCorrectChannel) {
+      completeSirenInteraction();
+    }
+  };
+  
+  canvas.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    updateKnob(e.clientX, e.clientY);
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      updateKnob(e.clientX, e.clientY);
+    }
+  });
+  
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+  
+  // Touch support
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    isDragging = true;
+    updateKnob(e.touches[0].clientX, e.touches[0].clientY);
+  });
+  
+  document.addEventListener('touchmove', (e) => {
+    if (isDragging) {
+      e.preventDefault();
+      updateKnob(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  });
+  
+  document.addEventListener('touchend', () => {
+    isDragging = false;
+  });
+}
+
+// Complete siren interaction
+function completeSirenInteraction() {
+  
+  
+  // Stop static sound
+  if (staticSound && staticSound.isPlaying()) {
+    staticSound.stop();
+  }
+  
+  // Remove glow from knob
+  if (sirenKnobContainer) {
+    sirenKnobContainer.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.5), inset 0 2px 5px rgba(255, 255, 255, 0.1)';
+  }
+  
+  // Hide current prompt
+  hideSirenPrompt();
+  
+  // Show announcement
+  setTimeout(() => {
+    showSirenPrompt("Announcement: this is an emergency alert that a tsunami is approaching our village. Please evacuate immediately.");
+    
+    // Hide announcement and complete event
+    setTimeout(() => {
+      hideSirenPrompt();
+      
+      // Remove tsunami from falling array
+      for (let i = falling.length - 1; i >= 0; i--) {
+        if (falling[i].type === 'tsunami') {
+          falling.splice(i, 1);
+          break;
+        }
+      }
+      
+      sirenInteractionActive = false;
+      
+      // Mark success (but DON'T brighten sky for tsunami)
+      successCount++;
+      console.log('Tsunami complete! successCount:', successCount, '/ requiredSuccess:', requiredSuccess);
+      lastSpawnTime = millis();
+      if (successCount >= requiredSuccess) {
+        console.log('All events complete! Showing sleep prompt.');
+        waitingForSleep = true;
+        showSleepPrompt();
+      } else {
+        console.log('More events to come...');
+      }
+    }, 3000);
+  }, 500);
 } 
 
  
@@ -996,6 +1681,14 @@ function handleButtonClick(id) {
     }
     return;
   }
+  
+  // Handle boat gate button (secondary interaction)
+  if (id === 'boat-gate') {
+    if (boatGateInteractionActive) {
+      completeBoatGateInteraction();
+    }
+    return;
+  }
 
   // If fog is active, only the light button can start lever interaction
   if (fog.active) {
@@ -1015,16 +1708,29 @@ function handleButtonClick(id) {
 
   if (!expectedType) return;
 
-  // find corresponding falling object and remove it
+  // find corresponding falling object and check if it exists
   for (let i = falling.length - 1; i >= 0; i--) {
     if (falling[i].type === expectedType) {
-      // clicked correct button for an active threat -> remove
-      falling.splice(i, 1);
-      successCount++;
-      brightenSky(); // brighten sky after resolving event
-      lastSpawnTime = millis();
-      if (successCount >= requiredSuccess) {
-        waitingForSleep = true;
+      // Found the matching threat
+      console.log('Found falling object of type:', expectedType);
+      
+      if (expectedType === 'boat') {
+        // Start boat gate interaction (secondary)
+        console.log('Starting boat gate interaction...');
+        startBoatGateInteraction();
+      } else if (expectedType === 'tsunami') {
+        // Start siren/knob interaction (secondary)
+        console.log('Starting siren interaction...');
+        startSirenInteraction();
+      } else {
+        // Other events resolve immediately
+        falling.splice(i, 1);
+        successCount++;
+        brightenSky();
+        lastSpawnTime = millis();
+        if (successCount >= requiredSuccess) {
+          waitingForSleep = true;
+        }
       }
       break;
     }
@@ -1061,62 +1767,76 @@ function startBrightening() {
 // Day 1: Black → Bright (1 step, 100%)
 // Day 2: Black → Middle → Bright (2 steps, 50% each)
 // Day 3: Black → 33% → 67% → Bright (3 steps, ~33% each)
+// Track if sky is currently animating to prevent overlapping animations
+let skyAnimating = false;
+let skyBrightenCount = 0; // Track how many events have brightened the sky
+
 function brightenSky() {
-  const totalEvents = requiredSuccess; // Day 1: 1, Day 2: 2, Day 3: 3
+  // Prevent overlapping animations
+  if (skyAnimating) {
+    console.log('Sky animation already in progress, skipping...');
+    return;
+  }
+  
+  skyAnimating = true;
+  skyBrightenCount++; // Increment each time this is called
+  
+  // Starting colors (black)
+  const startTop = [0x00, 0x00, 0x00];
+  const startBottom = [0x00, 0x00, 0x00];
   
   // Target colors (final bright sky)
   const targetTop = [0x88, 0xc7, 0xff]; // #88c7ff
   const targetBottom = [0x1e, 0x3a, 0x66]; // #1e3a66
   
-  // Middle color for day 2 (halfway between black and bright)
-  const middleTop = [0x44, 0x64, 0x80]; // Half brightness
-  const middleBottom = [0x0f, 0x1d, 0x33]; // Half brightness
-  
-  // Get current sky colors from body element
-  const currentTopHex = getComputedStyle(document.body).getPropertyValue('--sky-top').trim();
-  const currentBottomHex = getComputedStyle(document.body).getPropertyValue('--sky-bottom').trim();
-  
-  console.log('Day', currentDay, 'Event', successCount, '/', totalEvents); // Debug
-  console.log('Current sky top:', currentTopHex, 'bottom:', currentBottomHex); // Debug
-  
-  // Parse current colors
-  const fromTop = hexToRgbArray(currentTopHex);
-  const fromBottom = hexToRgbArray(currentBottomHex);
+  console.log('Day', currentDay, 'brightenSky call #', skyBrightenCount); // Debug
   
   let toTop, toBottom;
   
-  // Calculate target color based on day and current progress
+  // Calculate ABSOLUTE target color
   if (currentDay === 1) {
-    // Day 1: Go straight to bright after 1 event (100%)
+    // Day 1: 1 event → 100%
     toTop = targetTop;
     toBottom = targetBottom;
   } else if (currentDay === 2) {
-    // Day 2: Event 1 → Middle (50%), Event 2 → Bright (100%)
-    if (successCount === 1) {
-      toTop = middleTop;
-      toBottom = middleBottom;
-    } else {
-      toTop = targetTop;
-      toBottom = targetBottom;
-    }
-  } else {
-    // Day 3: Gradual progression (33%, 67%, 100%)
-    const targetProgress = successCount / totalEvents;
+    // Day 2: 2 events brighten
+    // Event 1 → 50%, Event 2 → 100%
+    const progress = Math.min(skyBrightenCount / 2, 1.0);
     toTop = [
-      Math.round(targetTop[0] * targetProgress),
-      Math.round(targetTop[1] * targetProgress),
-      Math.round(targetTop[2] * targetProgress)
+      Math.round(startTop[0] + (targetTop[0] - startTop[0]) * progress),
+      Math.round(startTop[1] + (targetTop[1] - startTop[1]) * progress),
+      Math.round(startTop[2] + (targetTop[2] - startTop[2]) * progress)
     ];
     toBottom = [
-      Math.round(targetBottom[0] * targetProgress),
-      Math.round(targetBottom[1] * targetProgress),
-      Math.round(targetBottom[2] * targetProgress)
+      Math.round(startBottom[0] + (targetBottom[0] - startBottom[0]) * progress),
+      Math.round(startBottom[1] + (targetBottom[1] - startBottom[1]) * progress),
+      Math.round(startBottom[2] + (targetBottom[2] - startBottom[2]) * progress)
+    ];
+  } else {
+    // Day 3: Only 2 events brighten (fog and boat, NOT tsunami)
+    // Event 1 → 50%, Event 2 → 100%
+    const progress = Math.min(skyBrightenCount / 2, 1.0);
+    toTop = [
+      Math.round(startTop[0] + (targetTop[0] - startTop[0]) * progress),
+      Math.round(startTop[1] + (targetTop[1] - startTop[1]) * progress),
+      Math.round(startTop[2] + (targetTop[2] - startTop[2]) * progress)
+    ];
+    toBottom = [
+      Math.round(startBottom[0] + (targetBottom[0] - startBottom[0]) * progress),
+      Math.round(startBottom[1] + (targetBottom[1] - startBottom[1]) * progress),
+      Math.round(startBottom[2] + (targetBottom[2] - startBottom[2]) * progress)
     ];
   }
   
-  console.log('Animating sky to:', toTop, toBottom); // Debug
+  console.log('Target sky color:', toTop, toBottom); // Debug
   
-  // Animate from current to new target
+  // Get current color
+  const currentTopHex = getComputedStyle(document.body).getPropertyValue('--sky-top').trim();
+  const currentBottomHex = getComputedStyle(document.body).getPropertyValue('--sky-bottom').trim();
+  const fromTop = hexToRgbArray(currentTopHex);
+  const fromBottom = hexToRgbArray(currentBottomHex);
+  
+  // Animate from current to target
   let steps = 40;
   let step = 0;
   
@@ -1130,6 +1850,7 @@ function brightenSky() {
     
     if (step >= steps) {
       clearInterval(interval);
+      skyAnimating = false;
       console.log('Sky brightening complete'); // Debug
     }
   }, 30);
@@ -1211,15 +1932,19 @@ function showSleepPrompt() {
     promptEl.style.bottom = '150px'; // Above buttons
     promptEl.style.left = '50%';
     promptEl.style.transform = 'translateX(-50%)';
-    promptEl.style.color = 'white';
-    promptEl.style.fontSize = '1.2em';
-    promptEl.style.textAlign = 'center';
-    promptEl.style.padding = '15px 30px';
-    promptEl.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    promptEl.style.borderRadius = '10px';
+    
+    // ========== VISUAL: Sleep Prompt Styling ==========
+    promptEl.style.color = 'white'; // Text color
+    promptEl.style.fontSize = '1.2em'; // Font size
+    promptEl.style.textAlign = 'center'; // Text alignment
+    promptEl.style.padding = '15px 30px'; // Internal spacing
+    promptEl.style.backgroundColor = 'rgba(0, 0, 0, 0.7)'; // Background color
+    promptEl.style.borderRadius = '10px'; // Rounded corners
     promptEl.style.zIndex = '10';
-    promptEl.style.opacity = '0';
-    promptEl.style.transition = 'opacity 1s ease-in';
+    promptEl.style.opacity = '0'; // Start invisible
+    promptEl.style.transition = 'opacity 1s ease-in'; // Fade animation
+    // ==================================================
+    
     document.body.appendChild(promptEl);
   }
   
@@ -1290,6 +2015,17 @@ function windowResized() {
     const lightButton = buttons.find(b => b.id === 'smoke-light');
     if (lightButton) {
       createLeverDecorations(lightButton.x, lightButton.y, lightButton.w, lightButton.h);
+    }
+  }
+  
+  // Recreate permanent siren knob (only on game pages)
+  if (isActive) {
+    const sirenButton = buttons.find(b => b.id === 'siren-tsunami');
+    if (sirenButton) {
+      // Remove old knob if exists
+      const oldKnob = document.getElementById('siren-knob-permanent');
+      if (oldKnob) oldKnob.remove();
+      createPermanentSirenKnob(sirenButton.x, sirenButton.y, sirenButton.w, sirenButton.h);
     }
   }
   
