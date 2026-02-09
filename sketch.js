@@ -23,7 +23,12 @@ let buttons = []; // objects: {id, img, x,y,w,h}
 
 // Falling objects
 let falling = []; // array of {type, img, x, y, startY, endY, startW, endW, speed}
-let spawnOrder = ['smoke', 'boat', 'tsunami'];
+
+// *** DAY-SPECIFIC EVENT CONFIGURATION ***
+// Day 1: Only fog (1 event)
+// Day 2: Fog and boat (2 events)
+// Day 3: Fog, boat, and tsunami (3 events)
+let spawnOrder = [];
 let nextSpawnIndex = 0;
 // *** TIME LIMIT: Time between events - gets shorter each day ***
 // Day 1: 5000ms, Day 2: 3500ms, Day 3: 2500ms
@@ -62,7 +67,9 @@ function getOceanTopPx() {
 
 // Progress
 let successCount = 0;
-let requiredSuccess = 3;
+// Required successes based on day:
+// Day 1: 1 event, Day 2: 2 events, Day 3: 3 events
+let requiredSuccess = currentDay;
 let waitingForSleep = false;
 let brightening = false;
 
@@ -109,8 +116,17 @@ function setup() {
   imageMode(CORNER);
 
   // Randomize event order
-  spawnOrder = shuffle(spawnOrder);
-  console.log('Event order:', spawnOrder);
+  // Day 1: Only fog
+  // Day 2: Fog and boat (randomized)
+  // Day 3: All three events (randomized)
+  if (currentDay === 1) {
+    spawnOrder = ['smoke'];
+  } else if (currentDay === 2) {
+    spawnOrder = shuffle(['smoke', 'boat']);
+  } else {
+    spawnOrder = shuffle(['smoke', 'boat', 'tsunami']);
+  }
+  console.log('Day', currentDay, '- Event order:', spawnOrder);
 
   // Create stars
   createStars();
@@ -708,37 +724,63 @@ function startBrightening() {
 }
 
 // Brighten the sky incrementally after each successful event
+// Day 1: Black → Bright (1 step, 100%)
+// Day 2: Black → Middle → Bright (2 steps, 50% each)
+// Day 3: Black → 33% → 67% → Bright (3 steps, ~33% each)
 function brightenSky() {
-  const totalEvents = requiredSuccess; // 3 events total
+  const totalEvents = requiredSuccess; // Day 1: 1, Day 2: 2, Day 3: 3
   
   // Target colors (final bright sky)
   const targetTop = [0x88, 0xc7, 0xff]; // #88c7ff
   const targetBottom = [0x1e, 0x3a, 0x66]; // #1e3a66
   
+  // Middle color for day 2 (halfway between black and bright)
+  const middleTop = [0x44, 0x64, 0x80]; // Half brightness
+  const middleBottom = [0x0f, 0x1d, 0x33]; // Half brightness
+  
   // Get current sky colors from body element
   const currentTopHex = getComputedStyle(document.body).getPropertyValue('--sky-top').trim();
   const currentBottomHex = getComputedStyle(document.body).getPropertyValue('--sky-bottom').trim();
   
+  console.log('Day', currentDay, 'Event', successCount, '/', totalEvents); // Debug
   console.log('Current sky top:', currentTopHex, 'bottom:', currentBottomHex); // Debug
   
   // Parse current colors
   const fromTop = hexToRgbArray(currentTopHex);
   const fromBottom = hexToRgbArray(currentBottomHex);
   
-  // Calculate target brightness for this event (incremental)
-  const targetProgress = successCount / totalEvents;
-  const toTop = [
-    Math.round(targetTop[0] * targetProgress),
-    Math.round(targetTop[1] * targetProgress),
-    Math.round(targetTop[2] * targetProgress)
-  ];
-  const toBottom = [
-    Math.round(targetBottom[0] * targetProgress),
-    Math.round(targetBottom[1] * targetProgress),
-    Math.round(targetBottom[2] * targetProgress)
-  ];
+  let toTop, toBottom;
   
-  console.log('Animating sky to:', toTop, toBottom, 'Progress:', targetProgress); // Debug
+  // Calculate target color based on day and current progress
+  if (currentDay === 1) {
+    // Day 1: Go straight to bright after 1 event (100%)
+    toTop = targetTop;
+    toBottom = targetBottom;
+  } else if (currentDay === 2) {
+    // Day 2: Event 1 → Middle (50%), Event 2 → Bright (100%)
+    if (successCount === 1) {
+      toTop = middleTop;
+      toBottom = middleBottom;
+    } else {
+      toTop = targetTop;
+      toBottom = targetBottom;
+    }
+  } else {
+    // Day 3: Gradual progression (33%, 67%, 100%)
+    const targetProgress = successCount / totalEvents;
+    toTop = [
+      Math.round(targetTop[0] * targetProgress),
+      Math.round(targetTop[1] * targetProgress),
+      Math.round(targetTop[2] * targetProgress)
+    ];
+    toBottom = [
+      Math.round(targetBottom[0] * targetProgress),
+      Math.round(targetBottom[1] * targetProgress),
+      Math.round(targetBottom[2] * targetProgress)
+    ];
+  }
+  
+  console.log('Animating sky to:', toTop, toBottom); // Debug
   
   // Animate from current to new target
   let steps = 40;
@@ -819,9 +861,8 @@ function lerpColorHex(a, b, t) {
 function showSleepPrompt() {
   let promptText = '';
   if (currentDay === 1) {
-    promptText = "It's already morning. I should go to sleep for tomorrow.";
-  } else if (currentDay === 2) {
-    promptText = "It's already morning. I should go to sleep for tomorrow.";
+    promptText = "That wasn’t just pressing buttons… It's morning already. I should sleep before tomorrow’s shift.";  } else if (currentDay === 2) {
+    promptText = "Another sunrise. I really should be asleep before tomorrow’s shift.";
   } else if (currentDay === 3) {
     promptText = "Finally done with these shifts. I can't wait to go back home.";
   }
