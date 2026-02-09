@@ -16,7 +16,8 @@ let dayone = isActive;
 
 // Images
 let lightImg, boatImg, sirenImg, sleepImg;
-let smokeImg, fallingBoatImg, tsunamiImg;
+let fallingBoatImg; // Only boat image needed for falling objects (tsunami is drawn)
+let leverHandleImg = null, leverPanelImg = null; // Lever images (loaded async, may be null)
 
 // Buttons
 let buttons = []; // objects: {id, img, x,y,w,h}
@@ -73,6 +74,16 @@ let requiredSuccess = currentDay;
 let waitingForSleep = false;
 let brightening = false;
 
+// Lever interaction state
+let leverInteractionActive = false;
+let leverDragging = false;
+let leverHandleEl = null; // DOM element for handle (set in createLeverDecorations)
+let leverHandleStartY = 0; // Initial Y position of handle
+let leverHandleCurrentY = 0; // Current Y position during drag
+let leverMaxDragDistance = 0; // Max distance handle can be dragged up
+let leverIntensity = 0; // 0 to 1, drives light opacity
+let lightCircleEl = null; // DOM element for the big yellow light circle
+
 // Fog event state — replaces smoke_monster behavior
 let fog = {
   active: false,
@@ -98,9 +109,16 @@ function preload() {
   sleepImg = loadImage('images/sleep_icon.png');
 
   // assets for threats
-  smokeImg = loadImage('images/smoke monster.png');
+  // smokeImg - not needed, fog is drawn programmatically
   fallingBoatImg = loadImage('images/boat.png');
+  // starfishImg - deleted, tsunami is drawn programmatically
   // tsunami will be drawn programmatically
+  
+  // Lever images - load in preload so they're ready immediately
+  // If these don't exist, the game will get stuck on "Loading..."
+  // To make them optional, comment out these lines
+  leverHandleImg = loadImage('images/lever_handle.png');
+  leverPanelImg = loadImage('images/lever_panel.png');
 }
 
 function setup() {
@@ -115,16 +133,18 @@ function setup() {
   canvas.style('position', 'fixed');
   imageMode(CORNER);
 
-  // Randomize event order
-  // Day 1: Only fog
+  // *** RANDOMIZE EVENT ORDER ***
+  // Day 1: Only fog (no randomization needed)
   // Day 2: Fog and boat (randomized)
   // Day 3: All three events (randomized)
   if (currentDay === 1) {
-    spawnOrder = ['smoke'];
+    spawnOrder = ['smoke']; // Only one event, no need to randomize
   } else if (currentDay === 2) {
-    spawnOrder = shuffle(['smoke', 'boat']);
+    const day2Events = ['smoke', 'boat'];
+    spawnOrder = shuffle(day2Events); // Randomize order
   } else {
-    spawnOrder = shuffle(['smoke', 'boat', 'tsunami']);
+    const day3Events = ['smoke', 'boat', 'tsunami'];
+    spawnOrder = shuffle(day3Events); // Randomize order
   }
   console.log('Day', currentDay, '- Event order:', spawnOrder);
 
@@ -132,9 +152,18 @@ function setup() {
   createStars();
 
   setupButtons();
+  
+  // Create lever decorations (now that images are loaded in preload)
+  if (leverHandleImg && leverPanelImg) {
+    const lightButton = buttons.find(b => b.id === 'smoke-light');
+    if (lightButton) {
+      createLeverDecorations(lightButton.x, lightButton.y, lightButton.w, lightButton.h);
+    }
+  }
+  
   createDayCalendar(); // Create calendar as DOM element
   lastSpawnTime = millis();
-} 
+}
 
 function draw() {
   if (!isActive) return;
@@ -286,26 +315,27 @@ function setupButtons() {
   
   // *** BUTTON HORIZONTAL POSITIONS - CENTERED AROUND SCREEN MIDDLE ***
   // Buttons are positioned relative to center (0.5)
-  // Current spacing: 0.17 between each button
+  // Now 5 buttons total: Light, Boat, Boat Gate, Siren, Sleep
   const centerX = 0.5; // Screen center
-  const buttonSpacing = 0.17; // Space between buttons (keep this for current spacing)
+  const buttonSpacing = 0.14; // Space between buttons (adjusted for 5 buttons)
   
-  const button1Position = centerX - (buttonSpacing * 1.5); // 0.245 (left of center)
-  const button2Position = centerX - (buttonSpacing * 0.5); // 0.415 (slightly left)
-  const button3Position = centerX + (buttonSpacing * 0.5); // 0.585 (slightly right)
-  const button4Position = centerX + (buttonSpacing * 1.5); // 0.755 (right of center)
+  const button1Position = centerX - (buttonSpacing * 2); // Light (leftmost)
+  const button2Position = centerX - (buttonSpacing * 1); // Boat
+  const button3Position = button2Position +.07; // Boat Gate (center)
+  const button4Position = centerX + (buttonSpacing * 1); // Siren/Tsunami
+  const button5Position = centerX + (buttonSpacing * 2); // Sleep (rightmost)
   
   // To adjust spacing: change buttonSpacing value
-  // Smaller value (e.g., 0.12) = buttons closer together
-  // Larger value (e.g., 0.20) = buttons more spread out
+  // Smaller value (e.g., 0.10) = buttons closer together
+  // Larger value (e.g., 0.16) = buttons more spread out
   
   // Calculate button dimensions
   const bw = min(maxButtonSize, width * buttonSizePercent);
   const bh = bw;
   const baseY = height - bh - bottomMargin;
 
-  // helper to create button objects with path for DOM img
-  function makeBtn(id, img, x, path) {
+  // helper to create button objects with path for DOM img or text
+  function makeBtn(id, img, x, path, isTextButton = false, buttonText = '', buttonColor = '') {
     return {
       id: id,
       img: img,
@@ -314,18 +344,25 @@ function setupButtons() {
       y: baseY,
       w: bw,
       h: bh,
-      el: null
+      el: null,
+      isTextButton: isTextButton,
+      buttonText: buttonText,
+      buttonColor: buttonColor
     };
   }
 
   // Create buttons with centered positions
   buttons.push(makeBtn('smoke-light', lightImg, width * button1Position, 'images/light_icon.png'));
   buttons.push(makeBtn('boat-boat', boatImg, width * button2Position, 'images/boat_icon.png'));
-  buttons.push(makeBtn('siren-tsunami', sirenImg, width * button3Position, 'images/siren_icon.png'));
-  buttons.push(makeBtn('sleep', sleepImg, width * button4Position, 'images/sleep_icon.png'));
+  // New Boat Gate button - text-based, green color
+  buttons.push(makeBtn('boat-gate', null, width * button3Position, null, true, 'Open Boat Gate', '#4a7c59'));
+  buttons.push(makeBtn('siren-tsunami', sirenImg, width * button4Position, 'images/siren_icon.png'));
+  buttons.push(makeBtn('sleep', sleepImg, width * button5Position, 'images/sleep_icon.png'));
 
   // create or update DOM button elements
   createButtonElements();
+  
+  // Note: Lever decorations are created after images load (see setup function)
 } 
 
 function createButtonElements() {
@@ -345,17 +382,42 @@ function createButtonElements() {
           }
         }
       } else {
-        const elt = document.createElement('img');
-        elt.className = 'ui-btn';
-        elt.setAttribute('draggable', 'false');
-        elt.dataset.id = b.id;
-        elt.src = b.path;
-        elt.addEventListener('click', (e) => { e.stopPropagation(); handleButtonClick(b.id); });
-        // support touch hover-like feedback
-        elt.addEventListener('touchstart', (e) => { elt.classList.add('touched'); });
-        elt.addEventListener('touchend', (e) => { elt.classList.remove('touched'); });
-        container.appendChild(elt);
-        b.el = elt;
+        // Create text button or image button
+        if (b.isTextButton) {
+          // Text-based button (e.g., Boat Gate)
+          const elt = document.createElement('div');
+          elt.className = 'ui-btn ui-btn-text';
+          elt.dataset.id = b.id;
+          elt.textContent = b.buttonText;
+          elt.style.backgroundColor = b.buttonColor;
+          elt.style.display = 'flex';
+          elt.style.alignItems = 'center';
+          elt.style.justifyContent = 'center';
+          elt.style.fontSize = '0.75em';
+          elt.style.fontWeight = 'bold';
+          elt.style.color = 'white';
+          elt.style.textAlign = 'center';
+          elt.style.lineHeight = '1.2';
+          elt.style.padding = '8px';
+          elt.addEventListener('click', (e) => { e.stopPropagation(); handleButtonClick(b.id); });
+          elt.addEventListener('touchstart', (e) => { elt.classList.add('touched'); });
+          elt.addEventListener('touchend', (e) => { elt.classList.remove('touched'); });
+          container.appendChild(elt);
+          b.el = elt;
+        } else {
+          // Image-based button
+          const elt = document.createElement('img');
+          elt.className = 'ui-btn';
+          elt.setAttribute('draggable', 'false');
+          elt.dataset.id = b.id;
+          elt.src = b.path;
+          elt.addEventListener('click', (e) => { e.stopPropagation(); handleButtonClick(b.id); });
+          // support touch hover-like feedback
+          elt.addEventListener('touchstart', (e) => { elt.classList.add('touched'); });
+          elt.addEventListener('touchend', (e) => { elt.classList.remove('touched'); });
+          container.appendChild(elt);
+          b.el = elt;
+        }
       }
     }
     // position the element based on computed b.x/b.y/w/h
@@ -380,6 +442,280 @@ function drawButtons() {
       b.el.style.width = b.w + 'px';
       b.el.style.height = b.h + 'px';
     }
+  }
+}
+
+// *** CREATE LEVER DECORATIONS NEXT TO LIGHT BUTTON ***
+// Adjust lever positions relative to light button here
+function createLeverDecorations(lightButtonX, lightButtonY, buttonWidth, buttonHeight) {
+  // Only create if lever images were successfully loaded
+  if (!leverHandleImg || !leverPanelImg) {
+    console.log('Lever images not available - skipping lever decorations');
+    return;
+  }
+  
+  const container = document.getElementById('ui-buttons');
+  if (!container) return;
+  
+  // *** LEVER PANEL POSITION - ADJUST THESE VALUES ***
+  const panelOffsetX = buttonWidth * 1.2; // Right of light button (negative = left, positive = right)
+  const panelOffsetY = -buttonHeight * 0.2; // Vertical offset (0 = aligned with button top)
+  const panelWidth = buttonWidth * 0.9; // Panel width relative to button
+  const panelHeight = buttonHeight * 1.4; // Panel height relative to button
+  
+  // *** LEVER HANDLE POSITION - ADJUST THESE VALUES ***
+  const handleOffsetX = buttonWidth * 1.3; // Position relative to light button
+  const handleOffsetY = -buttonHeight * 0.01; // Vertical offset (negative = above button)
+  const handleWidth = buttonWidth * 0.7; // Handle width
+  const handleHeight = buttonHeight * 1.0; // Handle height
+  
+  // *** LEVER DRAG SETTINGS - ADJUST MAX DRAG DISTANCE ***
+  const maxDragDistanceUp = buttonHeight * 0.3; // How far up the handle can be dragged (adjust this for goal position)
+  
+  // Create or update lever panel
+  let panelEl = document.getElementById('lever-panel');
+  if (!panelEl) {
+    panelEl = document.createElement('img');
+    panelEl.id = 'lever-panel';
+    panelEl.src = 'images/lever_panel.png';
+    panelEl.style.position = 'fixed';
+    panelEl.style.zIndex = '3';
+    panelEl.style.pointerEvents = 'none';
+    container.appendChild(panelEl);
+  }
+  panelEl.style.left = (lightButtonX + panelOffsetX) + 'px';
+  panelEl.style.top = (lightButtonY + panelOffsetY) + 'px';
+  panelEl.style.width = panelWidth + 'px';
+  panelEl.style.height = panelHeight + 'px';
+  
+  // Create or update lever handle
+  let handleEl = document.getElementById('lever-handle');
+  if (!handleEl) {
+    handleEl = document.createElement('img');
+    handleEl.id = 'lever-handle';
+    handleEl.src = 'images/lever_handle.png';
+    handleEl.style.position = 'fixed';
+    handleEl.style.zIndex = '3';
+    handleEl.style.pointerEvents = 'auto'; // Make it interactive
+    handleEl.style.cursor = 'pointer';
+    container.appendChild(handleEl);
+    
+    // Add drag event listeners
+    setupLeverDragEvents(handleEl);
+  }
+  
+  const handleX = lightButtonX + handleOffsetX;
+  const handleY = lightButtonY + handleOffsetY;
+  
+  handleEl.style.left = handleX + 'px';
+  handleEl.style.top = handleY + 'px';
+  handleEl.style.width = handleWidth + 'px';
+  handleEl.style.height = handleHeight + 'px';
+  
+  // Store handle element and position info globally
+  leverHandleEl = handleEl;
+  leverHandleStartY = handleY;
+  leverHandleCurrentY = handleY;
+  leverMaxDragDistance = maxDragDistanceUp;
+}
+
+// Setup drag events for lever handle
+function setupLeverDragEvents(handleEl) {
+  let isDragging = false;
+  let startY = 0;
+  let startHandleY = 0;
+  
+  const onMouseDown = (e) => {
+    if (!leverInteractionActive) return; // Only draggable after light button pressed
+    e.preventDefault();
+    isDragging = true;
+    startY = e.clientY;
+    startHandleY = leverHandleCurrentY;
+    leverDragging = true;
+    document.body.style.userSelect = 'none'; // Prevent text selection during drag
+  };
+  
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    
+    const deltaY = e.clientY - startY;
+    let newY = startHandleY + deltaY;
+    
+    // Clamp: can only move UP (negative), max distance is leverMaxDragDistance
+    const minY = leverHandleStartY - leverMaxDragDistance;
+    const maxY = leverHandleStartY;
+    newY = Math.max(minY, Math.min(maxY, newY));
+    
+    leverHandleCurrentY = newY;
+    handleEl.style.top = newY + 'px';
+    
+    // Calculate intensity (0 to 1) based on how far up the handle is
+    const draggedDistance = leverHandleStartY - leverHandleCurrentY;
+    leverIntensity = draggedDistance / leverMaxDragDistance;
+    
+    // Update light circle opacity
+    updateLightCircle();
+    
+    // Check if reached max position (100% intensity)
+    if (leverIntensity >= 0.99) {
+      completeLeverInteraction();
+    }
+  };
+  
+  const onMouseUp = () => {
+    if (isDragging) {
+      isDragging = false;
+      leverDragging = false;
+      document.body.style.userSelect = '';
+    }
+  };
+  
+  handleEl.addEventListener('mousedown', onMouseDown);
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+  
+  // Touch events for mobile
+  handleEl.addEventListener('touchstart', (e) => {
+    if (!leverInteractionActive) return;
+    e.preventDefault();
+    isDragging = true;
+    startY = e.touches[0].clientY;
+    startHandleY = leverHandleCurrentY;
+    leverDragging = true;
+  });
+  
+  document.addEventListener('touchmove', (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    
+    const deltaY = e.touches[0].clientY - startY;
+    let newY = startHandleY + deltaY;
+    
+    const minY = leverHandleStartY - leverMaxDragDistance;
+    const maxY = leverHandleStartY;
+    newY = Math.max(minY, Math.min(maxY, newY));
+    
+    leverHandleCurrentY = newY;
+    handleEl.style.top = newY + 'px';
+    
+    const draggedDistance = leverHandleStartY - leverHandleCurrentY;
+    leverIntensity = draggedDistance / leverMaxDragDistance;
+    
+    updateLightCircle();
+    
+    if (leverIntensity >= 0.99) {
+      completeLeverInteraction();
+    }
+  });
+  
+  document.addEventListener('touchend', () => {
+    if (isDragging) {
+      isDragging = false;
+      leverDragging = false;
+    }
+  });
+}
+
+// Start lever interaction (called after light button pressed)
+function startLeverInteraction() {
+  leverInteractionActive = true;
+  
+  // Add glow to lever handle using drop-shadow filter (avoids outlining transparent PNG background)
+  if (leverHandleEl) {
+    leverHandleEl.style.filter = 'drop-shadow(0 0 15px rgb(255, 213, 0)) brightness(1.3)';
+  }
+  
+  // Create light circle
+  createLightCircle();
+  
+  console.log('Lever interaction started - drag handle up!');
+}
+
+// Create the big yellow light circle
+function createLightCircle() {
+  if (lightCircleEl) return; // Already exists
+  
+  const circle = document.createElement('div');
+  circle.id = 'light-circle';
+  circle.style.position = 'fixed';
+  circle.style.left = '50%';
+  circle.style.top = '50%';
+  circle.style.transform = 'translate(-50%, -50%)';
+  
+  // Slightly smaller than screen
+  const size = Math.min(window.innerWidth, window.innerHeight) * 0.95;
+  circle.style.width = size + 'px';
+  circle.style.height = size + 'px';
+  circle.style.borderRadius = '50%';
+  circle.style.backgroundColor = 'yellow';
+  circle.style.opacity = '0.05'; // Start at 5%
+  circle.style.zIndex = '1'; // Same as canvas (above ocean, below lighthouse overlay at z-index 2)
+  circle.style.pointerEvents = 'none';
+  
+  document.body.appendChild(circle);
+  lightCircleEl = circle;
+}
+
+// Update light circle opacity based on lever intensity
+function updateLightCircle() {
+  if (!lightCircleEl) return;
+  
+  // Opacity goes from 5% to 100% as intensity goes from 0 to 1
+  const opacity = 0.05 + (leverIntensity * 0.95);
+  lightCircleEl.style.opacity = opacity.toString();
+}
+
+// Complete lever interaction when handle reaches max position
+function completeLeverInteraction() {
+  console.log('Lever interaction complete!');
+  
+  // Remove glow from handle
+  if (leverHandleEl) {
+    leverHandleEl.style.filter = '';
+  }
+  
+  // Fade out and remove light circle
+  if (lightCircleEl) {
+    lightCircleEl.style.transition = 'opacity 0.5s ease-out';
+    lightCircleEl.style.opacity = '0';
+    setTimeout(() => {
+      if (lightCircleEl) {
+        lightCircleEl.remove();
+        lightCircleEl = null;
+      }
+    }, 500);
+  }
+  
+  // Clear fog
+  if (fog.active) {
+    fog.fadeOut = true;
+  }
+  
+  // Reset lever position
+  setTimeout(() => {
+    if (leverHandleEl) {
+      leverHandleEl.style.transition = 'top 0.5s ease-out';
+      leverHandleEl.style.top = leverHandleStartY + 'px';
+      leverHandleCurrentY = leverHandleStartY;
+      leverIntensity = 0;
+      
+      // Remove transition after animation
+      setTimeout(() => {
+        if (leverHandleEl) {
+          leverHandleEl.style.transition = '';
+        }
+      }, 500);
+    }
+  }, 500);
+  
+  leverInteractionActive = false;
+  
+  // Mark success and check if all events complete
+  successCount++;
+  brightenSky();
+  if (successCount >= requiredSuccess) {
+    waitingForSleep = true;
   }
 } 
 
@@ -661,14 +997,12 @@ function handleButtonClick(id) {
     return;
   }
 
-  // If fog is active, only the light button can clear it
+  // If fog is active, only the light button can start lever interaction
   if (fog.active) {
-    if (id === 'smoke-light' && !fog.fadeOut) {
-      fog.fadeOut = true;
-      // mark success immediately; the fog will visually fade out soon
-      successCount++;
-      brightenSky(); // brighten sky after resolving event
-      if (successCount >= requiredSuccess) waitingForSleep = true;
+    if (id === 'smoke-light' && !fog.fadeOut && !leverInteractionActive) {
+      // Start lever interaction (user needs to drag handle up)
+      startLeverInteraction();
+      // Note: successCount and sky brightening happen in completeLeverInteraction()
     }
     return;
   }
@@ -861,8 +1195,9 @@ function lerpColorHex(a, b, t) {
 function showSleepPrompt() {
   let promptText = '';
   if (currentDay === 1) {
-    promptText = "That wasn’t just pressing buttons… It's morning already. I should sleep before tomorrow’s shift.";  } else if (currentDay === 2) {
-    promptText = "Another sunrise. I really should be asleep before tomorrow’s shift.";
+    promptText = "That wasn't just pressing buttons… It's morning already. I should sleep before tomorrow's shift.";
+  } else if (currentDay === 2) {
+    promptText = "Another sunrise. I really should be asleep before tomorrow's shift.";
   } else if (currentDay === 3) {
     promptText = "Finally done with these shifts. I can't wait to go back home.";
   }
@@ -873,7 +1208,7 @@ function showSleepPrompt() {
     promptEl = document.createElement('div');
     promptEl.id = 'sleep-prompt';
     promptEl.style.position = 'fixed';
-    promptEl.style.bottom = '150px'; // Above buttons (buttons are ~40px from bottom + button height)
+    promptEl.style.bottom = '150px'; // Above buttons
     promptEl.style.left = '50%';
     promptEl.style.transform = 'translateX(-50%)';
     promptEl.style.color = 'white';
@@ -949,6 +1284,14 @@ function endGame(won) {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   setupButtons();
+  
+  // Recreate lever decorations after buttons resize
+  if (leverHandleImg && leverPanelImg) {
+    const lightButton = buttons.find(b => b.id === 'smoke-light');
+    if (lightButton) {
+      createLeverDecorations(lightButton.x, lightButton.y, lightButton.w, lightButton.h);
+    }
+  }
   
   // Reposition calendar on resize
   const calendar = document.getElementById('day-calendar');
